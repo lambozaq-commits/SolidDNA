@@ -88,6 +88,27 @@ namespace SolidDNA
 
                     new CommandManagerItem
                     {
+                        Name = "Apply Sheet Format",
+                        Tooltip =
+                            "Replace drawing sheet formats.",
+                        Hint =
+                            "Replace the existing .slddrt sheet format on all " +
+                            "sheets or select one replacement format per sheet.",
+                        VisibleForDrawings = true,
+                        VisibleForAssemblies = false,
+                        VisibleForParts = false,
+
+                        OnClick =
+                            SheetFormatCommand.ShowSheetFormatForm,
+
+                        OnStateCheck = args =>
+                            args.Result =
+                                CommandManagerItemState
+                                    .DeselectedEnabled
+                    },
+
+                    new CommandManagerItem
+                    {
                         Name = "Test Connection",
                         Tooltip =
                             "Confirm that Cabin Tools is connected.",
