@@ -40,8 +40,8 @@ namespace SolidDNA
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MinimizeBox = false;
             MaximizeBox = false;
-            Width = 720;
-            Height = 560;
+            Width = 760;
+            Height = 580;
 
             TableLayoutPanel mainLayout =
                 new TableLayoutPanel();
@@ -65,11 +65,11 @@ namespace SolidDNA
             Label instructionLabel = new Label();
             instructionLabel.AutoSize = true;
             instructionLabel.Text =
-                "Enter any values currently available. " +
-                "You may leave fields blank. Blank priority " +
-                "properties will still be created or retained " +
-                "blank and moved into the requested order. " +
-                "Title2 and Title3 are calculated automatically.";
+                "Enter any values currently available. You may leave " +
+                "fields blank. Blank priority properties will still be " +
+                "created or retained blank and moved into the requested " +
+                "order. Existing properties are not overwritten when " +
+                "their entry is left blank.";
 
             mainLayout.Controls.Add(
                 instructionLabel,
@@ -90,7 +90,7 @@ namespace SolidDNA
             inputLayout.RowCount = missingProperties.Count;
 
             inputLayout.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Absolute, 210));
+                new ColumnStyle(SizeType.Absolute, 220));
 
             inputLayout.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 100));

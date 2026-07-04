@@ -3,7 +3,7 @@ using System.Windows.Forms;
 
 namespace SolidDNA
 {
-    internal class PdfPropertyForm : Form
+    internal sealed class PdfPropertyForm : Form
     {
         private readonly TextBox drwNumberTextBox;
         private readonly TextBox revisionTextBox;
@@ -49,7 +49,7 @@ namespace SolidDNA
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            Width = 700;
+            Width = 720;
             Height = 390;
 
             TableLayoutPanel layout = new TableLayoutPanel();
@@ -59,7 +59,7 @@ namespace SolidDNA
             layout.RowCount = 8;
 
             layout.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Absolute, 180));
+                new ColumnStyle(SizeType.Absolute, 190));
 
             layout.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 100));
@@ -91,7 +91,7 @@ namespace SolidDNA
             layoutTypeTextBox = AddTextRow(
                 layout,
                 4,
-                "Layout Type:",
+                "Layout type:",
                 layoutType);
 
             Label previewCaption = new Label();

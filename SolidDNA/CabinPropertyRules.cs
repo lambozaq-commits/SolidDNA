@@ -35,23 +35,31 @@ namespace SolidDNA
         }
     }
 
+    internal sealed class PropertyOrderDefinition
+    {
+        public string SourcePath { get; set; }
+        public DateTime SourceLastWriteTime { get; set; }
+        public List<string> PriorityPropertyNames { get; set; }
+    }
+
     internal sealed class PropertyCheckResult
     {
-        public CabinNamingValues NamingValues { get; set; }
+        public string DocumentTypeName { get; set; }
+        public PropertyOrderDefinition Definition { get; set; }
         public List<CustomPropertySnapshot> Properties { get; set; }
-        public List<string> MissingPromptProperties { get; set; }
+        public List<string> MissingOrBlankProperties { get; set; }
+        public Dictionary<string, int> CurrentPositions { get; set; }
+        public bool PriorityOrderCorrect { get; set; }
+        public string RepairBlockReason { get; set; }
 
+        public bool IsDrawing { get; set; }
+        public CabinNamingValues NamingValues { get; set; }
         public string ExpectedTitle2 { get; set; }
         public string ExpectedTitle3 { get; set; }
         public string CurrentTitle2 { get; set; }
         public string CurrentTitle3 { get; set; }
-
         public bool Title2Synchronized { get; set; }
         public bool Title3Synchronized { get; set; }
-        public bool PriorityOrderCorrect { get; set; }
-
-        public Dictionary<string, int> CurrentPositions { get; set; }
-        public string RepairBlockReason { get; set; }
 
         public bool CanRepair
         {
@@ -70,102 +78,56 @@ namespace SolidDNA
             report.AppendLine();
 
             report.AppendLine(
+                "Document type: " + DocumentTypeName);
+
+            report.AppendLine(
+                "Scope: General custom properties only.");
+
+            report.AppendLine(
+                "Source file: " + Definition.SourcePath);
+
+            report.AppendLine(
+                "Source file updated: " +
+                Definition.SourceLastWriteTime.ToString(
+                    "yyyy-MM-dd HH:mm:ss"));
+
+            report.AppendLine(
                 "General custom-property count: " +
                 Properties.Count);
 
             report.AppendLine();
 
-            report.AppendLine("PDF / TITLE SOURCE PROPERTIES");
-            report.AppendLine(
-                "DrwNumber: " +
-                CabinPropertyRules.DisplayValue(
-                    NamingValues.DrwNumber));
-
-            report.AppendLine(
-                "Revision: " +
-                CabinPropertyRules.DisplayValue(
-                    NamingValues.Revision));
-
-            report.AppendLine(
-                "Cabin type description: " +
-                CabinPropertyRules.DisplayValue(
-                    NamingValues.CabinTypeDescription));
-
-            report.AppendLine(
-                "Cabin type defined: " +
-                CabinPropertyRules.DisplayValue(
-                    NamingValues.CabinTypeDefined));
-
-            report.AppendLine(
-                "Layout Type: " +
-                CabinPropertyRules.DisplayValue(
-                    NamingValues.LayoutType));
-
-            report.AppendLine();
-
-            if (MissingPromptProperties.Count == 0)
+            if (MissingOrBlankProperties.Count == 0)
             {
                 report.AppendLine(
-                    "Required priority input properties: OK");
+                    "Priority properties: all have values.");
             }
             else
             {
                 report.AppendLine(
-                    "Missing or blank priority input properties:");
+                    "Missing or blank priority properties:");
 
                 foreach (string propertyName in
-                    MissingPromptProperties)
+                    MissingOrBlankProperties)
                 {
                     report.AppendLine("  - " + propertyName);
                 }
+
+                report.AppendLine();
+                report.AppendLine(
+                    "Reorder + Repair will let you enter any " +
+                    "available values. Blank entries are allowed.");
             }
 
             report.AppendLine();
-            report.AppendLine("DERIVED TITLE PROPERTIES");
-
-            report.AppendLine(
-                "Title2 expected: " +
-                CabinPropertyRules.DisplayValue(
-                    ExpectedTitle2));
-
-            report.AppendLine(
-                "Title2 current:  " +
-                CabinPropertyRules.DisplayValue(
-                    CurrentTitle2));
-
-            report.AppendLine(
-                "Title2 state: " +
-                (Title2Synchronized
-                    ? "Synchronized"
-                    : "Needs repair"));
-
-            report.AppendLine();
-
-            report.AppendLine(
-                "Title3 expected: " +
-                CabinPropertyRules.DisplayValue(
-                    ExpectedTitle3));
-
-            report.AppendLine(
-                "Title3 current:  " +
-                CabinPropertyRules.DisplayValue(
-                    CurrentTitle3));
-
-            report.AppendLine(
-                "Title3 state: " +
-                (Title3Synchronized
-                    ? "Synchronized"
-                    : "Needs repair"));
-
-            report.AppendLine();
-            report.AppendLine("REQUESTED PRIORITY ORDER");
+            report.AppendLine("REQUESTED PROPERTY ORDER");
 
             for (int i = 0;
-                i < CabinPropertyRules.PriorityPropertyNames.Length;
+                i < Definition.PriorityPropertyNames.Count;
                 i++)
             {
                 string propertyName =
-                    CabinPropertyRules.PriorityPropertyNames[i];
+                    Definition.PriorityPropertyNames[i];
 
                 int position = -1;
 
@@ -178,9 +140,9 @@ namespace SolidDNA
                         : "missing";
 
                 report.AppendLine(
-                    (i + 1) + ". " +
+                    (i + 1).ToString() + ". " +
                     propertyName +
-                    " — current position: " +
+                    " - current position: " +
                     positionText);
             }
 
@@ -192,29 +154,69 @@ namespace SolidDNA
                     ? "Correct"
                     : "Needs reorder"));
 
+            if (IsDrawing)
+            {
+                report.AppendLine();
+                report.AppendLine(
+                    "DRAWING TITLE SYNCHRONIZATION");
+
+                report.AppendLine(
+                    "Title2 expected: " +
+                    CabinPropertyRules.DisplayValue(
+                        ExpectedTitle2));
+
+                report.AppendLine(
+                    "Title2 current:  " +
+                    CabinPropertyRules.DisplayValue(
+                        CurrentTitle2));
+
+                report.AppendLine(
+                    "Title2 state: " +
+                    (Title2Synchronized
+                        ? "Synchronized"
+                        : "Needs repair"));
+
+                report.AppendLine();
+
+                report.AppendLine(
+                    "Title3 expected: " +
+                    CabinPropertyRules.DisplayValue(
+                        ExpectedTitle3));
+
+                report.AppendLine(
+                    "Title3 current:  " +
+                    CabinPropertyRules.DisplayValue(
+                        CurrentTitle3));
+
+                report.AppendLine(
+                    "Title3 state: " +
+                    (Title3Synchronized
+                        ? "Synchronized"
+                        : "Needs repair"));
+            }
+
             report.AppendLine();
 
             if (CanRepair)
             {
+                report.AppendLine("Repair status: Ready.");
                 report.AppendLine(
-                    "Repair status: Ready.");
-
-                report.AppendLine(
-                    "Reorder + Repair will ask for missing values, " +
-                    "create a local backup, recreate the general " +
-                    "custom-property list, and apply the requested order.");
+                    "Reorder + Repair will create a local backup, " +
+                    "add missing priority properties as blank text " +
+                    "properties, move the priority properties to the " +
+                    "top, and keep all other general properties in " +
+                    "their current relative order.");
             }
             else
             {
-                report.AppendLine(
-                    "Repair status: Blocked.");
-
+                report.AppendLine("Repair status: Blocked.");
                 report.AppendLine(RepairBlockReason);
             }
 
             report.AppendLine();
             report.AppendLine(
-                "Configuration-specific custom properties are not changed.");
+                "Configuration-specific and cut-list properties " +
+                "are not changed.");
 
             return report.ToString();
         }
@@ -225,6 +227,7 @@ namespace SolidDNA
         public string BackupFilePath { get; set; }
         public List<string> AddedProperties { get; set; }
         public int ReorderedPropertyCount { get; set; }
+        public bool TitlePropertiesSynchronized { get; set; }
     }
 
     internal static class CabinPropertyRules
@@ -235,84 +238,10 @@ namespace SolidDNA
             "Cabin type description";
         public const string CabinTypeDefinedProperty =
             "Cabin type defined";
-        public const string LayoutTypeProperty = "Layout Type";
+        public const string LayoutTypeProperty = "Layout type";
 
         public const string Title2Property = "Title2";
         public const string Title3Property = "Title3";
-
-        public const string DescriptionProperty = "Description";
-        public const string CheckedByProperty = "CheckedBy";
-        public const string CheckedDateProperty = "CheckedDate";
-        public const string ApprovedByProperty = "ApprovedBy";
-        public const string ClientProperty = "Client";
-        public const string ProjectProperty = "PROJECT";
-        public const string ProjectNumberProperty = "Project Number";
-        public const string ProjectTypeProperty = "Project_type";
-        public const string StatusProperty = "Status";
-        public const string Approved00Property = "APPROVED_00";
-        public const string Date00Property = "DATE_00";
-        public const string Date00AppProperty = "DATE_00_APP";
-        public const string DocIdProperty = "Doc_ID";
-        public const string SwFileNameProperty = "SW-File Name";
-
-        public static readonly string[] PdfSourcePropertyNames =
-        {
-            DrwNumberProperty,
-            RevisionProperty,
-            CabinTypeDescriptionProperty,
-            CabinTypeDefinedProperty,
-            LayoutTypeProperty
-        };
-
-        // These are the fields shown in the missing-property prompt.
-        // Title2 and Title3 are intentionally excluded because the add-in derives them.
-        public static readonly string[] PromptPropertyNames =
-        {
-            DrwNumberProperty,
-            RevisionProperty,
-            CabinTypeDescriptionProperty,
-            CabinTypeDefinedProperty,
-            LayoutTypeProperty,
-            DescriptionProperty,
-            CheckedByProperty,
-            CheckedDateProperty,
-            ApprovedByProperty,
-            ClientProperty,
-            ProjectProperty,
-            ProjectNumberProperty,
-            ProjectTypeProperty,
-            StatusProperty,
-            Approved00Property,
-            Date00Property,
-            Date00AppProperty,
-            DocIdProperty,
-            SwFileNameProperty
-        };
-
-        public static readonly string[] PriorityPropertyNames =
-        {
-            DrwNumberProperty,
-            RevisionProperty,
-            CabinTypeDescriptionProperty,
-            CabinTypeDefinedProperty,
-            LayoutTypeProperty,
-            Title2Property,
-            Title3Property,
-            DescriptionProperty,
-            CheckedByProperty,
-            CheckedDateProperty,
-            ApprovedByProperty,
-            ClientProperty,
-            ProjectProperty,
-            ProjectNumberProperty,
-            ProjectTypeProperty,
-            StatusProperty,
-            Approved00Property,
-            Date00Property,
-            Date00AppProperty,
-            DocIdProperty,
-            SwFileNameProperty
-        };
 
         public static string BuildTitle2(
             string cabinTypeDescription)
@@ -349,7 +278,7 @@ namespace SolidDNA
             return MakeSafeFileName(fileName);
         }
 
-        public static List<string> GetMissingPdfSourceProperties(
+        public static List<string> GetMissingPdfNamingProperties(
             CabinNamingValues values)
         {
             List<string> missing = new List<string>();
@@ -372,11 +301,8 @@ namespace SolidDNA
                 missing.Add(CabinTypeDefinedProperty);
             }
 
-            if (string.IsNullOrWhiteSpace(
-                values.LayoutType))
-            {
+            if (string.IsNullOrWhiteSpace(values.LayoutType))
                 missing.Add(LayoutTypeProperty);
-            }
 
             return missing;
         }
@@ -386,8 +312,7 @@ namespace SolidDNA
             char[] invalidCharacters =
                 Path.GetInvalidFileNameChars();
 
-            foreach (char invalidCharacter in
-                invalidCharacters)
+            foreach (char invalidCharacter in invalidCharacters)
             {
                 fileName = fileName.Replace(
                     invalidCharacter,
@@ -399,10 +324,9 @@ namespace SolidDNA
 
         public static string DisplayValue(string value)
         {
-            if (string.IsNullOrWhiteSpace(value))
-                return "<blank>";
-
-            return value;
+            return string.IsNullOrWhiteSpace(value)
+                ? "<blank>"
+                : value;
         }
 
         public static string Clean(string value)
@@ -413,63 +337,329 @@ namespace SolidDNA
         }
     }
 
+    internal static class PropertyOrderSettings
+    {
+        private const string SettingsFolderName = "CabinTools";
+        private const string SettingsFileName =
+            "PropertyCheckerSettings.txt";
+
+        public static string GetSavedSourceFilePath()
+        {
+            string settingsFilePath = GetSettingsFilePath();
+
+            if (!File.Exists(settingsFilePath))
+                return string.Empty;
+
+            try
+            {
+                return File.ReadAllText(settingsFilePath).Trim();
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        public static void SaveSourceFilePath(string sourceFilePath)
+        {
+            if (string.IsNullOrWhiteSpace(sourceFilePath))
+            {
+                throw new ArgumentException(
+                    "The property order source path is empty.");
+            }
+
+            string settingsDirectory =
+                Path.GetDirectoryName(GetSettingsFilePath());
+
+            Directory.CreateDirectory(settingsDirectory);
+
+            File.WriteAllText(
+                GetSettingsFilePath(),
+                Path.GetFullPath(sourceFilePath));
+        }
+
+        private static string GetSettingsFilePath()
+        {
+            string settingsDirectory = Path.Combine(
+                System.Environment.GetFolderPath(
+                    System.Environment.SpecialFolder.LocalApplicationData),
+                SettingsFolderName);
+
+            return Path.Combine(
+                settingsDirectory,
+                SettingsFileName);
+        }
+    }
+
+    internal static class PropertyOrderSource
+    {
+        private const string StartMarker =
+            "[CabinToolsPriority]";
+
+        private const string EndMarker =
+            "[/CabinToolsPriority]";
+
+        private const int FallbackPriorityCount = 19;
+
+        public static PropertyOrderDefinition LoadSavedDefinition()
+        {
+            string sourceFilePath =
+                PropertyOrderSettings.GetSavedSourceFilePath();
+
+            if (string.IsNullOrWhiteSpace(sourceFilePath))
+            {
+                throw new InvalidOperationException(
+                    "No Properties.txt source file has been selected. " +
+                    "Click 'Select Properties.txt...' and select the " +
+                    "file from the PDM template folder.");
+            }
+
+            return LoadDefinition(sourceFilePath);
+        }
+
+        public static PropertyOrderDefinition LoadDefinition(
+            string sourceFilePath)
+        {
+            if (string.IsNullOrWhiteSpace(sourceFilePath))
+            {
+                throw new InvalidOperationException(
+                    "The Properties.txt source path is empty.");
+            }
+
+            if (!File.Exists(sourceFilePath))
+            {
+                throw new FileNotFoundException(
+                    "The configured Properties.txt source file could " +
+                    "not be found. In PDM, get the latest version of " +
+                    "the file and then select it again.",
+                    sourceFilePath);
+            }
+
+            string[] lines = File.ReadAllLines(sourceFilePath);
+
+            List<string> propertyNames =
+                ExtractPriorityPropertyNames(lines);
+
+            if (propertyNames.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "Properties.txt contains no usable priority " +
+                    "property names.");
+            }
+
+            return new PropertyOrderDefinition
+            {
+                SourcePath = sourceFilePath,
+                SourceLastWriteTime =
+                    File.GetLastWriteTime(sourceFilePath),
+                PriorityPropertyNames = propertyNames
+            };
+        }
+
+        private static List<string> ExtractPriorityPropertyNames(
+            string[] lines)
+        {
+            List<string> names = new List<string>();
+
+            bool startMarkerFound = false;
+            bool insideMarkedSection = false;
+
+            foreach (string rawLine in lines)
+            {
+                string line = NormalizeLine(rawLine);
+
+                if (string.Equals(
+                    line,
+                    StartMarker,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    startMarkerFound = true;
+                    insideMarkedSection = true;
+                    continue;
+                }
+
+                if (string.Equals(
+                    line,
+                    EndMarker,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    if (insideMarkedSection)
+                        break;
+
+                    continue;
+                }
+
+                if (startMarkerFound && !insideMarkedSection)
+                    continue;
+
+                if (!startMarkerFound &&
+                    names.Count >= FallbackPriorityCount)
+                {
+                    break;
+                }
+
+                if (IsIgnoredLine(line))
+                    continue;
+
+                AddUniqueName(names, line);
+            }
+
+            if (startMarkerFound && names.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "The [CabinToolsPriority] section in Properties.txt " +
+                    "contains no property names.");
+            }
+
+            return names;
+        }
+
+        private static void AddUniqueName(
+            List<string> names,
+            string propertyName)
+        {
+            foreach (string existingName in names)
+            {
+                if (string.Equals(
+                    existingName,
+                    propertyName,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            names.Add(propertyName);
+        }
+
+        private static string NormalizeLine(string line)
+        {
+            if (line == null)
+                return string.Empty;
+
+            return line
+                .Trim()
+                .TrimStart('\uFEFF');
+        }
+
+        private static bool IsIgnoredLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                return true;
+
+            return line.StartsWith("#") ||
+                   line.StartsWith("//") ||
+                   line.StartsWith(";");
+        }
+    }
+
     internal static class CabinPropertyService
     {
-        public static CabinNamingValues ReadSourceValues(
-            IModelDoc2 drawingDoc)
+        public static bool IsSupportedDocument(
+            IModelDoc2 modelDoc)
+        {
+            if (modelDoc == null)
+                return false;
+
+            int documentType = modelDoc.GetType();
+
+            return documentType ==
+                       (int)swDocumentTypes_e.swDocPART ||
+                   documentType ==
+                       (int)swDocumentTypes_e.swDocASSEMBLY ||
+                   documentType ==
+                       (int)swDocumentTypes_e.swDocDRAWING;
+        }
+
+        public static string GetDocumentTypeName(
+            IModelDoc2 modelDoc)
+        {
+            if (modelDoc == null)
+                return "Unknown";
+
+            int documentType = modelDoc.GetType();
+
+            if (documentType ==
+                (int)swDocumentTypes_e.swDocPART)
+            {
+                return "Part";
+            }
+
+            if (documentType ==
+                (int)swDocumentTypes_e.swDocASSEMBLY)
+            {
+                return "Assembly";
+            }
+
+            if (documentType ==
+                (int)swDocumentTypes_e.swDocDRAWING)
+            {
+                return "Drawing";
+            }
+
+            return "Unsupported";
+        }
+
+        public static bool IsDrawing(IModelDoc2 modelDoc)
+        {
+            return modelDoc != null &&
+                   modelDoc.GetType() ==
+                       (int)swDocumentTypes_e.swDocDRAWING;
+        }
+
+        public static CabinNamingValues ReadNamingValues(
+            IModelDoc2 modelDoc)
         {
             return new CabinNamingValues
             {
                 DrwNumber = ReadResolvedProperty(
-                    drawingDoc,
+                    modelDoc,
                     CabinPropertyRules.DrwNumberProperty),
 
                 Revision = ReadResolvedProperty(
-                    drawingDoc,
+                    modelDoc,
                     CabinPropertyRules.RevisionProperty),
 
                 CabinTypeDescription = ReadResolvedProperty(
-                    drawingDoc,
-                    CabinPropertyRules
-                        .CabinTypeDescriptionProperty),
+                    modelDoc,
+                    CabinPropertyRules.CabinTypeDescriptionProperty),
 
                 CabinTypeDefined = ReadResolvedProperty(
-                    drawingDoc,
-                    CabinPropertyRules
-                        .CabinTypeDefinedProperty),
+                    modelDoc,
+                    CabinPropertyRules.CabinTypeDefinedProperty),
 
                 LayoutType = ReadResolvedProperty(
-                    drawingDoc,
+                    modelDoc,
                     CabinPropertyRules.LayoutTypeProperty)
             };
         }
 
-        public static void WriteSourceValues(
-            IModelDoc2 drawingDoc,
+        public static void WriteNamingValues(
+            IModelDoc2 modelDoc,
             CabinNamingValues values)
         {
-            WritePropertyValuePreservingType(
-                drawingDoc,
+            WriteTextProperty(
+                modelDoc,
                 CabinPropertyRules.DrwNumberProperty,
                 values.DrwNumber);
 
-            WritePropertyValuePreservingType(
-                drawingDoc,
+            WriteTextProperty(
+                modelDoc,
                 CabinPropertyRules.RevisionProperty,
                 values.Revision);
 
-            WritePropertyValuePreservingType(
-                drawingDoc,
+            WriteTextProperty(
+                modelDoc,
                 CabinPropertyRules.CabinTypeDescriptionProperty,
                 values.CabinTypeDescription);
 
-            WritePropertyValuePreservingType(
-                drawingDoc,
+            WriteTextProperty(
+                modelDoc,
                 CabinPropertyRules.CabinTypeDefinedProperty,
                 values.CabinTypeDefined);
 
-            WritePropertyValuePreservingType(
-                drawingDoc,
+            WriteTextProperty(
+                modelDoc,
                 CabinPropertyRules.LayoutTypeProperty,
                 values.LayoutType);
         }
@@ -477,8 +667,11 @@ namespace SolidDNA
         public static bool SynchronizeDerivedTitleProperties(
             IModelDoc2 drawingDoc)
         {
+            if (!IsDrawing(drawingDoc))
+                return false;
+
             CabinNamingValues values =
-                ReadSourceValues(drawingDoc);
+                ReadNamingValues(drawingDoc);
 
             string expectedTitle2 =
                 CabinPropertyRules.BuildTitle2(
@@ -502,160 +695,136 @@ namespace SolidDNA
             return title2Changed || title3Changed;
         }
 
-        public static Dictionary<string, string>
-            GetSuggestedMissingValues(
-                IModelDoc2 drawingDoc,
-                List<string> missingProperties)
+        public static PropertyCheckResult Analyze(
+            IModelDoc2 modelDoc,
+            PropertyOrderDefinition definition)
         {
-            Dictionary<string, string> suggestions =
-                new Dictionary<string, string>(
-                    StringComparer.OrdinalIgnoreCase);
-
-            foreach (string propertyName in missingProperties)
+            if (modelDoc == null)
             {
-                string suggestedValue =
-                    ReadResolvedProperty(
-                        drawingDoc,
-                        propertyName);
-
-                if (string.IsNullOrWhiteSpace(suggestedValue) &&
-                    string.Equals(
-                        propertyName,
-                        CabinPropertyRules.SwFileNameProperty,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    string drawingPath =
-                        drawingDoc.GetPathName();
-
-                    if (!string.IsNullOrWhiteSpace(drawingPath))
-                    {
-                        suggestedValue =
-                            Path.GetFileNameWithoutExtension(
-                                drawingPath);
-                    }
-                }
-
-                suggestions[propertyName] =
-                    suggestedValue ?? string.Empty;
+                throw new InvalidOperationException(
+                    "No SOLIDWORKS document is available.");
             }
 
-            return suggestions;
-        }
+            if (definition == null ||
+                definition.PriorityPropertyNames == null ||
+                definition.PriorityPropertyNames.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "The property order definition is empty.");
+            }
 
-        public static PropertyCheckResult Analyze(
-            IModelDoc2 drawingDoc)
-        {
             List<CustomPropertySnapshot> properties =
-                ReadAllProperties(drawingDoc);
-
-            CabinNamingValues values =
-                ReadSourceValues(drawingDoc);
-
-            string expectedTitle2 =
-                CabinPropertyRules.BuildTitle2(
-                    values.CabinTypeDescription);
-
-            string expectedTitle3 =
-                CabinPropertyRules.BuildTitle3(
-                    values.CabinTypeDefined,
-                    values.LayoutType);
-
-            string currentTitle2 = ReadResolvedProperty(
-                drawingDoc,
-                CabinPropertyRules.Title2Property);
-
-            string currentTitle3 = ReadResolvedProperty(
-                drawingDoc,
-                CabinPropertyRules.Title3Property);
+                ReadAllGeneralProperties(modelDoc);
 
             Dictionary<string, int> positions =
-                new Dictionary<string, int>(
-                    StringComparer.OrdinalIgnoreCase);
+                BuildPositionLookup(properties);
 
-            for (int i = 0; i < properties.Count; i++)
+            List<string> missingOrBlank =
+                GetMissingOrBlankProperties(
+                    modelDoc,
+                    definition.PriorityPropertyNames);
+
+            bool priorityOrderCorrect =
+                IsPriorityOrderCorrect(
+                    definition.PriorityPropertyNames,
+                    positions);
+
+            bool isDrawing = IsDrawing(modelDoc);
+
+            CabinNamingValues namingValues =
+                isDrawing
+                    ? ReadNamingValues(modelDoc)
+                    : null;
+
+            string expectedTitle2 = string.Empty;
+            string expectedTitle3 = string.Empty;
+            string currentTitle2 = string.Empty;
+            string currentTitle3 = string.Empty;
+            bool title2Synchronized = true;
+            bool title3Synchronized = true;
+
+            if (isDrawing)
             {
-                if (!positions.ContainsKey(properties[i].Name))
-                    positions.Add(properties[i].Name, i);
-            }
+                expectedTitle2 =
+                    CabinPropertyRules.BuildTitle2(
+                        namingValues.CabinTypeDescription);
 
-            bool priorityOrderCorrect = true;
+                expectedTitle3 =
+                    CabinPropertyRules.BuildTitle3(
+                        namingValues.CabinTypeDefined,
+                        namingValues.LayoutType);
 
-            for (int i = 0;
-                i < CabinPropertyRules.PriorityPropertyNames.Length;
-                i++)
-            {
-                string propertyName =
-                    CabinPropertyRules.PriorityPropertyNames[i];
+                currentTitle2 = ReadResolvedProperty(
+                    modelDoc,
+                    CabinPropertyRules.Title2Property);
 
-                if (!positions.ContainsKey(propertyName) ||
-                    positions[propertyName] != i)
-                {
-                    priorityOrderCorrect = false;
-                    break;
-                }
-            }
+                currentTitle3 = ReadResolvedProperty(
+                    modelDoc,
+                    CabinPropertyRules.Title3Property);
 
-            bool hasTitle2 = positions.ContainsKey(
-                CabinPropertyRules.Title2Property);
+                title2Synchronized =
+                    positions.ContainsKey(
+                        CabinPropertyRules.Title2Property) &&
+                    string.Equals(
+                        currentTitle2,
+                        expectedTitle2,
+                        StringComparison.Ordinal);
 
-            bool hasTitle3 = positions.ContainsKey(
-                CabinPropertyRules.Title3Property);
-
-            List<string> missingPromptProperties =
-                new List<string>();
-
-            foreach (string propertyName in
-                CabinPropertyRules.PromptPropertyNames)
-            {
-                string propertyValue =
-                    ReadResolvedProperty(
-                        drawingDoc,
-                        propertyName);
-
-                if (string.IsNullOrWhiteSpace(propertyValue))
-                    missingPromptProperties.Add(propertyName);
+                title3Synchronized =
+                    positions.ContainsKey(
+                        CabinPropertyRules.Title3Property) &&
+                    string.Equals(
+                        currentTitle3,
+                        expectedTitle3,
+                        StringComparison.Ordinal);
             }
 
             return new PropertyCheckResult
             {
-                NamingValues = values,
+                DocumentTypeName = GetDocumentTypeName(modelDoc),
+                Definition = definition,
                 Properties = properties,
-                MissingPromptProperties =
-                    missingPromptProperties,
-
+                MissingOrBlankProperties = missingOrBlank,
+                CurrentPositions = positions,
+                PriorityOrderCorrect = priorityOrderCorrect,
+                RepairBlockReason = GetRepairBlockReason(modelDoc),
+                IsDrawing = isDrawing,
+                NamingValues = namingValues,
                 ExpectedTitle2 = expectedTitle2,
                 ExpectedTitle3 = expectedTitle3,
-
                 CurrentTitle2 = currentTitle2,
                 CurrentTitle3 = currentTitle3,
-
-                Title2Synchronized =
-                    hasTitle2 &&
-                    string.Equals(
-                        currentTitle2,
-                        expectedTitle2,
-                        StringComparison.Ordinal),
-
-                Title3Synchronized =
-                    hasTitle3 &&
-                    string.Equals(
-                        currentTitle3,
-                        expectedTitle3,
-                        StringComparison.Ordinal),
-
-                PriorityOrderCorrect = priorityOrderCorrect,
-                CurrentPositions = positions,
-                RepairBlockReason =
-                    GetRepairBlockReason(drawingDoc)
+                Title2Synchronized = title2Synchronized,
+                Title3Synchronized = title3Synchronized
             };
         }
 
+        public static Dictionary<string, string> GetSuggestedValues(
+            IModelDoc2 modelDoc,
+            List<string> propertyNames)
+        {
+            Dictionary<string, string> values =
+                new Dictionary<string, string>(
+                    StringComparer.OrdinalIgnoreCase);
+
+            foreach (string propertyName in propertyNames)
+            {
+                values[propertyName] =
+                    ReadResolvedProperty(
+                        modelDoc,
+                        propertyName);
+            }
+
+            return values;
+        }
+
         public static PropertyRepairResult RepairAndReorder(
-            IModelDoc2 drawingDoc,
+            IModelDoc2 modelDoc,
+            PropertyOrderDefinition definition,
             Dictionary<string, string> suppliedValues)
         {
             string repairBlockReason =
-                GetRepairBlockReason(drawingDoc);
+                GetRepairBlockReason(modelDoc);
 
             if (!string.IsNullOrWhiteSpace(repairBlockReason))
             {
@@ -663,15 +832,8 @@ namespace SolidDNA
                     repairBlockReason);
             }
 
-            if (suppliedValues == null)
-            {
-                suppliedValues =
-                    new Dictionary<string, string>(
-                        StringComparer.OrdinalIgnoreCase);
-            }
-
             List<CustomPropertySnapshot> originalProperties =
-                ReadAllProperties(drawingDoc);
+                ReadAllGeneralProperties(modelDoc);
 
             List<CustomPropertySnapshot> workingProperties =
                 CloneProperties(originalProperties);
@@ -679,163 +841,28 @@ namespace SolidDNA
             List<string> addedProperties =
                 new List<string>();
 
-            MergeSuppliedValuesIntoSnapshots(
+            EnsurePriorityProperties(
                 workingProperties,
-                suppliedValues,
+                definition.PriorityPropertyNames,
                 addedProperties);
 
-            CabinNamingValues namingValues =
-                ReadSourceValues(drawingDoc);
-
-            ApplySuppliedValuesToNamingValues(
-                namingValues,
+            ApplyNonBlankSuppliedValues(
+                workingProperties,
                 suppliedValues);
 
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.DrwNumberProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.RevisionProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.CabinTypeDescriptionProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.CabinTypeDefinedProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.LayoutTypeProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.DescriptionProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.CheckedByProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.CheckedDateProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.ApprovedByProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.ClientProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.ProjectProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.ProjectNumberProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.ProjectTypeProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.StatusProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.Approved00Property,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.Date00Property,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.Date00AppProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.DocIdProperty,
-                string.Empty,
-                addedProperties);
-
-            EnsureSnapshot(
-                workingProperties,
-                CabinPropertyRules.SwFileNameProperty,
-                string.Empty,
-                addedProperties);
-
-            string expectedTitle2 =
-                CabinPropertyRules.BuildTitle2(
-                    namingValues.CabinTypeDescription);
-
-            string expectedTitle3 =
-                CabinPropertyRules.BuildTitle3(
-                    namingValues.CabinTypeDefined,
-                    namingValues.LayoutType);
-
-            EnsureAndUpdateTextSnapshot(
-                workingProperties,
-                CabinPropertyRules.Title2Property,
-                expectedTitle2,
-                addedProperties);
-
-            EnsureAndUpdateTextSnapshot(
-                workingProperties,
-                CabinPropertyRules.Title3Property,
-                expectedTitle3,
-                addedProperties);
-
             List<CustomPropertySnapshot> orderedProperties =
-                BuildDesiredOrder(workingProperties);
+                BuildDesiredOrder(
+                    workingProperties,
+                    definition.PriorityPropertyNames);
 
             string backupFilePath = CreateBackupFile(
-                drawingDoc,
+                modelDoc,
+                definition,
                 originalProperties,
                 orderedProperties);
 
             ICustomPropertyManager propertyManager =
-                GetGeneralPropertyManager(drawingDoc);
+                GetGeneralPropertyManager(modelDoc);
 
             try
             {
@@ -847,46 +874,48 @@ namespace SolidDNA
                     propertyManager,
                     orderedProperties);
 
-                VerifyPropertyOrder(
-                    drawingDoc,
-                    orderedProperties);
+                VerifyPriorityOrder(
+                    modelDoc,
+                    definition.PriorityPropertyNames);
 
-                drawingDoc.ForceRebuild3(false);
+                bool titlesChanged =
+                    SynchronizeDerivedTitleProperties(modelDoc);
+
+                modelDoc.ForceRebuild3(false);
+
+                return new PropertyRepairResult
+                {
+                    BackupFilePath = backupFilePath,
+                    AddedProperties = addedProperties,
+                    ReorderedPropertyCount = orderedProperties.Count,
+                    TitlePropertiesSynchronized = titlesChanged
+                };
             }
             catch (Exception ex)
             {
-                bool restored = TryRestoreOriginalProperties(
-                    drawingDoc,
-                    originalProperties);
+                bool restored =
+                    TryRestoreOriginalProperties(
+                        modelDoc,
+                        originalProperties);
 
                 string restoreMessage = restored
                     ? " The original property list was restored."
-                    : " Automatic restoration failed. Use the backup report.";
+                    : " Automatic restoration failed. Use the backup file.";
 
                 throw new InvalidOperationException(
                     "Property reorder failed." +
                     restoreMessage +
-                    "\n\nBackup: " +
-                    backupFilePath +
-                    "\n\nTechnical detail: " +
-                    ex.Message);
+                    "\n\nBackup: " + backupFilePath +
+                    "\n\nTechnical detail: " + ex.Message);
             }
-
-            return new PropertyRepairResult
-            {
-                BackupFilePath = backupFilePath,
-                AddedProperties = addedProperties,
-                ReorderedPropertyCount =
-                    orderedProperties.Count
-            };
         }
 
         public static string ReadResolvedProperty(
-            IModelDoc2 drawingDoc,
+            IModelDoc2 modelDoc,
             string propertyName)
         {
             ICustomPropertyManager propertyManager =
-                GetGeneralPropertyManager(drawingDoc);
+                GetGeneralPropertyManager(modelDoc);
 
             string value;
             string resolvedValue;
@@ -909,116 +938,13 @@ namespace SolidDNA
                 : value.Trim();
         }
 
-        private static void ApplySuppliedValuesToNamingValues(
-            CabinNamingValues namingValues,
-            Dictionary<string, string> suppliedValues)
-        {
-            string value;
-
-            if (suppliedValues.TryGetValue(
-                CabinPropertyRules.DrwNumberProperty,
-                out value))
-            {
-                namingValues.DrwNumber = value;
-            }
-
-            if (suppliedValues.TryGetValue(
-                CabinPropertyRules.RevisionProperty,
-                out value))
-            {
-                namingValues.Revision = value;
-            }
-
-            if (suppliedValues.TryGetValue(
-                CabinPropertyRules.CabinTypeDescriptionProperty,
-                out value))
-            {
-                namingValues.CabinTypeDescription = value;
-            }
-
-            if (suppliedValues.TryGetValue(
-                CabinPropertyRules.CabinTypeDefinedProperty,
-                out value))
-            {
-                namingValues.CabinTypeDefined = value;
-            }
-
-            if (suppliedValues.TryGetValue(
-                CabinPropertyRules.LayoutTypeProperty,
-                out value))
-            {
-                namingValues.LayoutType = value;
-            }
-        }
-
-        private static void MergeSuppliedValuesIntoSnapshots(
-            List<CustomPropertySnapshot> properties,
-            Dictionary<string, string> suppliedValues,
-            List<string> addedProperties)
-        {
-            foreach (KeyValuePair<string, string> pair in
-                suppliedValues)
-            {
-                CustomPropertySnapshot existing =
-                    FindSnapshot(properties, pair.Key);
-
-                if (existing == null)
-                {
-                    properties.Add(
-                        new CustomPropertySnapshot
-                        {
-                            Name = pair.Key,
-                            Type =
-                                (int)swCustomInfoType_e
-                                    .swCustomInfoText,
-                            RawValue = pair.Value ?? string.Empty,
-                            OriginalIndex = int.MaxValue
-                        });
-
-                    addedProperties.Add(pair.Key);
-                }
-                else
-                {
-                    existing.RawValue =
-                        pair.Value ?? string.Empty;
-                }
-            }
-        }
-
-        private static void WritePropertyValuePreservingType(
-            IModelDoc2 drawingDoc,
-            string propertyName,
-            string propertyValue)
-        {
-            List<CustomPropertySnapshot> properties =
-                ReadAllProperties(drawingDoc);
-
-            CustomPropertySnapshot existing =
-                FindSnapshot(properties, propertyName);
-
-            int propertyType =
-                existing == null
-                    ? (int)swCustomInfoType_e.swCustomInfoText
-                    : existing.Type;
-
-            ICustomPropertyManager propertyManager =
-                GetGeneralPropertyManager(drawingDoc);
-
-            propertyManager.Add3(
-                propertyName,
-                propertyType,
-                propertyValue ?? string.Empty,
-                (int)swCustomPropertyAddOption_e
-                    .swCustomPropertyReplaceValue);
-        }
-
         private static bool WriteTextPropertyIfChanged(
-            IModelDoc2 drawingDoc,
+            IModelDoc2 modelDoc,
             string propertyName,
             string expectedValue)
         {
             List<CustomPropertySnapshot> properties =
-                ReadAllProperties(drawingDoc);
+                ReadAllGeneralProperties(modelDoc);
 
             CustomPropertySnapshot existing =
                 FindSnapshot(properties, propertyName);
@@ -1034,24 +960,94 @@ namespace SolidDNA
                 return false;
             }
 
+            WriteTextProperty(
+                modelDoc,
+                propertyName,
+                expectedValue);
+
+            return true;
+        }
+
+        private static void WriteTextProperty(
+            IModelDoc2 modelDoc,
+            string propertyName,
+            string propertyValue)
+        {
             ICustomPropertyManager propertyManager =
-                GetGeneralPropertyManager(drawingDoc);
+                GetGeneralPropertyManager(modelDoc);
 
             propertyManager.Add3(
                 propertyName,
                 (int)swCustomInfoType_e.swCustomInfoText,
-                expectedValue ?? string.Empty,
+                propertyValue ?? string.Empty,
                 (int)swCustomPropertyAddOption_e
                     .swCustomPropertyReplaceValue);
+        }
+
+        private static List<string> GetMissingOrBlankProperties(
+            IModelDoc2 modelDoc,
+            List<string> priorityPropertyNames)
+        {
+            List<string> missingOrBlank =
+                new List<string>();
+
+            foreach (string propertyName in priorityPropertyNames)
+            {
+                string propertyValue =
+                    ReadResolvedProperty(
+                        modelDoc,
+                        propertyName);
+
+                if (string.IsNullOrWhiteSpace(propertyValue))
+                {
+                    missingOrBlank.Add(propertyName);
+                }
+            }
+
+            return missingOrBlank;
+        }
+
+        private static Dictionary<string, int> BuildPositionLookup(
+            List<CustomPropertySnapshot> properties)
+        {
+            Dictionary<string, int> positions =
+                new Dictionary<string, int>(
+                    StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < properties.Count; i++)
+            {
+                if (!positions.ContainsKey(properties[i].Name))
+                {
+                    positions.Add(properties[i].Name, i);
+                }
+            }
+
+            return positions;
+        }
+
+        private static bool IsPriorityOrderCorrect(
+            List<string> priorityPropertyNames,
+            Dictionary<string, int> currentPositions)
+        {
+            for (int i = 0; i < priorityPropertyNames.Count; i++)
+            {
+                string propertyName = priorityPropertyNames[i];
+
+                if (!currentPositions.ContainsKey(propertyName) ||
+                    currentPositions[propertyName] != i)
+                {
+                    return false;
+                }
+            }
 
             return true;
         }
 
         private static List<CustomPropertySnapshot>
-            ReadAllProperties(IModelDoc2 drawingDoc)
+            ReadAllGeneralProperties(IModelDoc2 modelDoc)
         {
             ICustomPropertyManager propertyManager =
-                GetGeneralPropertyManager(drawingDoc);
+                GetGeneralPropertyManager(modelDoc);
 
             List<CustomPropertySnapshot> properties =
                 new List<CustomPropertySnapshot>();
@@ -1109,8 +1105,7 @@ namespace SolidDNA
             List<CustomPropertySnapshot> clones =
                 new List<CustomPropertySnapshot>();
 
-            foreach (CustomPropertySnapshot property in
-                properties)
+            foreach (CustomPropertySnapshot property in properties)
             {
                 clones.Add(property.Clone());
             }
@@ -1118,70 +1113,84 @@ namespace SolidDNA
             return clones;
         }
 
-        private static void EnsureSnapshot(
+        private static void EnsurePriorityProperties(
             List<CustomPropertySnapshot> properties,
-            string propertyName,
-            string defaultValue,
+            List<string> priorityPropertyNames,
             List<string> addedProperties)
         {
-            if (FindSnapshot(properties, propertyName) != null)
-                return;
-
-            properties.Add(
-                new CustomPropertySnapshot
-                {
-                    Name = propertyName,
-                    Type =
-                        (int)swCustomInfoType_e.swCustomInfoText,
-                    RawValue = defaultValue ?? string.Empty,
-                    OriginalIndex = int.MaxValue
-                });
-
-            addedProperties.Add(propertyName);
-        }
-
-        private static void EnsureAndUpdateTextSnapshot(
-            List<CustomPropertySnapshot> properties,
-            string propertyName,
-            string propertyValue,
-            List<string> addedProperties)
-        {
-            CustomPropertySnapshot snapshot =
-                FindSnapshot(properties, propertyName);
-
-            if (snapshot == null)
+            foreach (string propertyName in priorityPropertyNames)
             {
-                snapshot =
+                if (FindSnapshot(properties, propertyName) != null)
+                    continue;
+
+                properties.Add(
                     new CustomPropertySnapshot
                     {
                         Name = propertyName,
                         Type =
-                            (int)swCustomInfoType_e
-                                .swCustomInfoText,
-                        RawValue = propertyValue ?? string.Empty,
+                            (int)swCustomInfoType_e.swCustomInfoText,
+                        RawValue = string.Empty,
+                        OriginalIndex = int.MaxValue
+                    });
+
+                addedProperties.Add(propertyName);
+            }
+        }
+
+        private static void ApplyNonBlankSuppliedValues(
+            List<CustomPropertySnapshot> properties,
+            Dictionary<string, string> suppliedValues)
+        {
+            if (suppliedValues == null)
+                return;
+
+            foreach (KeyValuePair<string, string> pair in
+                suppliedValues)
+            {
+                string suppliedValue =
+                    pair.Value == null
+                        ? string.Empty
+                        : pair.Value.Trim();
+
+                if (string.IsNullOrWhiteSpace(suppliedValue))
+                    continue;
+
+                CustomPropertySnapshot snapshot =
+                    FindSnapshot(properties, pair.Key);
+
+                if (snapshot == null)
+                {
+                    snapshot = new CustomPropertySnapshot
+                    {
+                        Name = pair.Key,
+                        Type =
+                            (int)swCustomInfoType_e.swCustomInfoText,
+                        RawValue = suppliedValue,
                         OriginalIndex = int.MaxValue
                     };
 
-                properties.Add(snapshot);
-                addedProperties.Add(propertyName);
-                return;
+                    properties.Add(snapshot);
+                }
+                else
+                {
+                    snapshot.Type =
+                        (int)swCustomInfoType_e.swCustomInfoText;
+
+                    snapshot.RawValue = suppliedValue;
+                }
             }
-
-            snapshot.Type =
-                (int)swCustomInfoType_e.swCustomInfoText;
-
-            snapshot.RawValue = propertyValue ?? string.Empty;
         }
 
         private static List<CustomPropertySnapshot>
             BuildDesiredOrder(
-                List<CustomPropertySnapshot> properties)
+                List<CustomPropertySnapshot> properties,
+                List<string> priorityPropertyNames)
         {
             List<CustomPropertySnapshot> ordered =
                 new List<CustomPropertySnapshot>();
 
             foreach (string priorityPropertyName in
-                CabinPropertyRules.PriorityPropertyNames)
+                priorityPropertyNames)
             {
                 CustomPropertySnapshot snapshot =
                     FindSnapshot(
@@ -1192,24 +1201,22 @@ namespace SolidDNA
                     ordered.Add(snapshot);
             }
 
-            foreach (CustomPropertySnapshot snapshot in
-                properties)
+            foreach (CustomPropertySnapshot snapshot in properties)
             {
-                if (!ContainsSnapshot(ordered, snapshot))
+                if (!ContainsReference(ordered, snapshot))
                     ordered.Add(snapshot);
             }
 
             return ordered;
         }
 
-        private static bool ContainsSnapshot(
+        private static bool ContainsReference(
             List<CustomPropertySnapshot> properties,
-            CustomPropertySnapshot snapshot)
+            CustomPropertySnapshot target)
         {
-            foreach (CustomPropertySnapshot property in
-                properties)
+            foreach (CustomPropertySnapshot property in properties)
             {
-                if (object.ReferenceEquals(property, snapshot))
+                if (object.ReferenceEquals(property, target))
                     return true;
             }
 
@@ -1220,8 +1227,7 @@ namespace SolidDNA
             List<CustomPropertySnapshot> properties,
             string propertyName)
         {
-            foreach (CustomPropertySnapshot property in
-                properties)
+            foreach (CustomPropertySnapshot property in properties)
             {
                 if (string.Equals(
                     property.Name,
@@ -1239,8 +1245,7 @@ namespace SolidDNA
             ICustomPropertyManager propertyManager,
             List<CustomPropertySnapshot> properties)
         {
-            foreach (CustomPropertySnapshot property in
-                properties)
+            foreach (CustomPropertySnapshot property in properties)
             {
                 propertyManager.Delete2(property.Name);
             }
@@ -1250,8 +1255,7 @@ namespace SolidDNA
             ICustomPropertyManager propertyManager,
             List<CustomPropertySnapshot> properties)
         {
-            foreach (CustomPropertySnapshot property in
-                properties)
+            foreach (CustomPropertySnapshot property in properties)
             {
                 propertyManager.Add3(
                     property.Name,
@@ -1261,45 +1265,45 @@ namespace SolidDNA
             }
         }
 
-        private static void VerifyPropertyOrder(
-            IModelDoc2 drawingDoc,
-            List<CustomPropertySnapshot> expectedProperties)
+        private static void VerifyPriorityOrder(
+            IModelDoc2 modelDoc,
+            List<string> priorityPropertyNames)
         {
             List<CustomPropertySnapshot> actualProperties =
-                ReadAllProperties(drawingDoc);
+                ReadAllGeneralProperties(modelDoc);
 
-            if (actualProperties.Count != expectedProperties.Count)
+            if (actualProperties.Count < priorityPropertyNames.Count)
             {
                 throw new InvalidOperationException(
-                    "The recreated property count does not match " +
-                    "the expected count.");
+                    "The recreated property list has fewer properties " +
+                    "than the source priority list.");
             }
 
-            for (int i = 0; i < expectedProperties.Count; i++)
+            for (int i = 0; i < priorityPropertyNames.Count; i++)
             {
                 if (!string.Equals(
                     actualProperties[i].Name,
-                    expectedProperties[i].Name,
+                    priorityPropertyNames[i],
                     StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
                         "SOLIDWORKS did not keep the requested " +
-                        "custom-property order.");
+                        "priority-property order.");
                 }
             }
         }
 
         private static bool TryRestoreOriginalProperties(
-            IModelDoc2 drawingDoc,
+            IModelDoc2 modelDoc,
             List<CustomPropertySnapshot> originalProperties)
         {
             try
             {
                 ICustomPropertyManager propertyManager =
-                    GetGeneralPropertyManager(drawingDoc);
+                    GetGeneralPropertyManager(modelDoc);
 
                 List<CustomPropertySnapshot> currentProperties =
-                    ReadAllProperties(drawingDoc);
+                    ReadAllGeneralProperties(modelDoc);
 
                 DeleteProperties(
                     propertyManager,
@@ -1309,7 +1313,7 @@ namespace SolidDNA
                     propertyManager,
                     originalProperties);
 
-                drawingDoc.ForceRebuild3(false);
+                modelDoc.ForceRebuild3(false);
 
                 return true;
             }
@@ -1320,7 +1324,8 @@ namespace SolidDNA
         }
 
         private static string CreateBackupFile(
-            IModelDoc2 drawingDoc,
+            IModelDoc2 modelDoc,
+            PropertyOrderDefinition definition,
             List<CustomPropertySnapshot> originalProperties,
             List<CustomPropertySnapshot> reorderedProperties)
         {
@@ -1332,20 +1337,18 @@ namespace SolidDNA
 
             Directory.CreateDirectory(backupDirectory);
 
-            string drawingPath = drawingDoc.GetPathName();
+            string documentPath = modelDoc.GetPathName();
 
-            string drawingName =
-                string.IsNullOrWhiteSpace(drawingPath)
-                    ? "UnsavedDrawing"
-                    : Path.GetFileNameWithoutExtension(
-                        drawingPath);
+            string documentName =
+                string.IsNullOrWhiteSpace(documentPath)
+                    ? "UnsavedDocument"
+                    : Path.GetFileNameWithoutExtension(documentPath);
 
-            drawingName =
-                CabinPropertyRules.MakeSafeFileName(
-                    drawingName);
+            documentName =
+                CabinPropertyRules.MakeSafeFileName(documentName);
 
             string backupFileName =
-                drawingName +
+                documentName +
                 "_PropertyBackup_" +
                 DateTime.Now.ToString("yyyyMMdd_HHmmss") +
                 ".txt";
@@ -1357,14 +1360,18 @@ namespace SolidDNA
             StringBuilder backup = new StringBuilder();
 
             backup.AppendLine(
-                "Cabin Tools Property Reorder Backup");
+                "Cabin Tools Property Checker Backup");
 
             backup.AppendLine(
                 "Created: " +
                 DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
 
             backup.AppendLine(
-                "Drawing: " + drawingPath);
+                "Document: " + documentPath);
+
+            backup.AppendLine(
+                "Property-order source: " +
+                definition.SourcePath);
 
             backup.AppendLine();
 
@@ -1397,8 +1404,7 @@ namespace SolidDNA
         {
             for (int i = 0; i < properties.Count; i++)
             {
-                CustomPropertySnapshot property =
-                    properties[i];
+                CustomPropertySnapshot property = properties[i];
 
                 string safeValue =
                     (property.RawValue ?? string.Empty)
@@ -1406,43 +1412,43 @@ namespace SolidDNA
                     .Replace("\n", "\\n");
 
                 builder.AppendLine(
-                    (i + 1) + ". " +
+                    (i + 1).ToString() + ". " +
                     property.Name +
                     " | Type: " +
-                    property.Type +
+                    property.Type.ToString() +
                     " | Value: " +
                     safeValue);
             }
         }
 
         private static string GetRepairBlockReason(
-            IModelDoc2 drawingDoc)
+            IModelDoc2 modelDoc)
         {
-            string drawingPath = drawingDoc.GetPathName();
+            string documentPath = modelDoc.GetPathName();
 
-            if (string.IsNullOrWhiteSpace(drawingPath))
+            if (string.IsNullOrWhiteSpace(documentPath))
             {
                 return
-                    "Save the drawing first. Reorder + Repair is " +
-                    "blocked for unsaved drawings.";
+                    "Save the document first. Reorder + Repair is " +
+                    "blocked for unsaved documents.";
             }
 
-            if (!File.Exists(drawingPath))
+            if (!File.Exists(documentPath))
             {
                 return
-                    "The drawing file does not exist at its current " +
+                    "The document file does not exist at its current " +
                     "path. Save or reopen it before repairing.";
             }
 
             FileAttributes attributes =
-                File.GetAttributes(drawingPath);
+                File.GetAttributes(documentPath);
 
             if ((attributes & FileAttributes.ReadOnly) ==
                 FileAttributes.ReadOnly)
             {
                 return
-                    "The drawing file is read-only. In SOLIDWORKS PDM, " +
-                    "check out the drawing before using Reorder + Repair.";
+                    "The document file is read-only. In SOLIDWORKS PDM, " +
+                    "check out the file before using Reorder + Repair.";
             }
 
             return string.Empty;
@@ -1450,21 +1456,21 @@ namespace SolidDNA
 
         private static ICustomPropertyManager
             GetGeneralPropertyManager(
-                IModelDoc2 drawingDoc)
+                IModelDoc2 modelDoc)
         {
-            if (drawingDoc == null)
+            if (modelDoc == null)
             {
                 throw new InvalidOperationException(
-                    "No drawing document is available.");
+                    "No SOLIDWORKS document is available.");
             }
 
             IModelDocExtension extension =
-                drawingDoc.Extension;
+                modelDoc.Extension;
 
             if (extension == null)
             {
                 throw new InvalidOperationException(
-                    "Could not access the drawing document extension.");
+                    "Could not access the document extension.");
             }
 
             ICustomPropertyManager propertyManager =

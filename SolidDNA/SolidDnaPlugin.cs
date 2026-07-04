@@ -9,9 +9,7 @@ namespace SolidDNA
     [ComVisible(true)]
     public class SolidDnaPlugin : SolidPlugIn
     {
-        // Change this ID from the previous version so SOLIDWORKS
-        // refreshes the CommandManager definition after reinstall.
-        private const int CommandTabId = 180002;
+        private const int CommandTabId = 180001;
 
         public override string AddInTitle
         {
@@ -48,38 +46,18 @@ namespace SolidDNA
                 {
                     new CommandManagerItem
                     {
-                        Name = "Test Connection",
+                        Name = "Property Checker",
                         Tooltip =
-                            "Confirm that Cabin Tools is connected.",
+                            "Check and reorder general custom properties.",
                         Hint =
-                            "Show a Cabin Tools connection test message.",
+                            "Read the property order from Properties.txt, " +
+                            "check missing values, then reorder safely.",
                         VisibleForDrawings = true,
                         VisibleForAssemblies = true,
                         VisibleForParts = true,
 
-                        OnClick = ShowTestConnection,
-
-                        OnStateCheck = args =>
-                            args.Result =
-                                CommandManagerItemState
-                                    .DeselectedEnabled
-                    },
-
-                    new CommandManagerItem
-                    {
-                        Name = "Property Checker",
-                        Tooltip =
-                            "Check missing values, title consistency, " +
-                            "and custom-property order.",
-                        Hint =
-                            "Check or repair drawing general custom properties.",
-                        VisibleForDrawings = true,
-                        VisibleForAssemblies = false,
-                        VisibleForParts = false,
-
                         OnClick =
-                            PropertyOrganizerCommand
-                                .ShowPropertyChecker,
+                            PropertyOrganizerCommand.ShowOrganizer,
 
                         OnStateCheck = args =>
                             args.Result =
@@ -93,14 +71,33 @@ namespace SolidDNA
                         Tooltip =
                             "Export the active drawing to PDF.",
                         Hint =
-                            "Synchronize Title2 and Title3, then export " +
-                            "all drawing sheets to one PDF.",
+                            "Synchronize drawing title properties and " +
+                            "export all sheets to one PDF.",
                         VisibleForDrawings = true,
                         VisibleForAssemblies = false,
                         VisibleForParts = false,
 
                         OnClick =
                             PdfExportCommand.ExportActiveDrawingToPdf,
+
+                        OnStateCheck = args =>
+                            args.Result =
+                                CommandManagerItemState
+                                    .DeselectedEnabled
+                    },
+
+                    new CommandManagerItem
+                    {
+                        Name = "Test Connection",
+                        Tooltip =
+                            "Confirm that Cabin Tools is connected.",
+                        Hint =
+                            "Show a Cabin Tools connection test message.",
+                        VisibleForDrawings = true,
+                        VisibleForAssemblies = true,
+                        VisibleForParts = true,
+
+                        OnClick = ShowTestConnection,
 
                         OnStateCheck = args =>
                             args.Result =

@@ -22,11 +22,11 @@ namespace SolidDNA
                     return;
 
                 CabinNamingValues values =
-                    CabinPropertyService.ReadSourceValues(
+                    CabinPropertyService.ReadNamingValues(
                         drawingDoc);
 
                 if (CabinPropertyRules
-                    .GetMissingPdfSourceProperties(values)
+                    .GetMissingPdfNamingProperties(values)
                     .Count > 0)
                 {
                     using (PdfPropertyForm propertyForm =
@@ -60,7 +60,7 @@ namespace SolidDNA
                     }
 
                     if (CabinPropertyRules
-                        .GetMissingPdfSourceProperties(values)
+                        .GetMissingPdfNamingProperties(values)
                         .Count > 0)
                     {
                         ShowError(
@@ -70,7 +70,7 @@ namespace SolidDNA
                         return;
                     }
 
-                    CabinPropertyService.WriteSourceValues(
+                    CabinPropertyService.WriteNamingValues(
                         drawingDoc,
                         values);
                 }
@@ -216,8 +216,8 @@ namespace SolidDNA
             {
                 throw new InvalidOperationException(
                     "SOLIDWORKS could not export the PDF.\n\n" +
-                    "Error code: " + errors + "\n" +
-                    "Warning code: " + warnings);
+                    "Error code: " + errors.ToString() + "\n" +
+                    "Warning code: " + warnings.ToString());
             }
         }
 
