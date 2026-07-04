@@ -121,6 +121,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CabinPropertyRules.cs" />
+    <Compile Include="PreviousVersionDrawingCommand.cs" />
+    <Compile Include="PreviousVersionDrawingForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="SheetFormatForm.cs">
       <SubType>Form</SubType>
     </Compile>

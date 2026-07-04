@@ -109,6 +109,28 @@ namespace SolidDNA
 
                     new CommandManagerItem
                     {
+                        Name = "Save Drawings as SW2025",
+                        Tooltip =
+                            "Create SOLIDWORKS 2025 copies of up to five drawings.",
+                        Hint =
+                            "Select up to five drawing files, rename each output " +
+                            "file, then create previous-version copies outside PDM.",
+                        VisibleForDrawings = true,
+                        VisibleForAssemblies = true,
+                        VisibleForParts = true,
+
+                        OnClick =
+                            PreviousVersionDrawingCommand
+                                .ShowSaveDrawingsForm,
+
+                        OnStateCheck = args =>
+                            args.Result =
+                                CommandManagerItemState
+                                    .DeselectedEnabled
+                    },
+
+                    new CommandManagerItem
+                    {
                         Name = "Test Connection",
                         Tooltip =
                             "Confirm that Cabin Tools is connected.",
