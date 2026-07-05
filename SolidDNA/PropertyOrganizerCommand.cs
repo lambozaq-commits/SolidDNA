@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
@@ -405,21 +405,11 @@ namespace SolidDNA
                               ", ",
                               result.AddedProperties);
 
-                string titleText =
-                    CabinPropertyService.IsDrawing(
-                        activeDocument)
-                        ? "\n\nTitle2 / Title3 synchronized: " +
-                          (result.TitlePropertiesSynchronized
-                            ? "updated"
-                            : "already current")
-                        : string.Empty;
-
                 MessageBox.Show(
                     "Property reorder completed.\n\n" +
                     addedText +
                     "\n\nGeneral properties reordered: " +
                     result.ReorderedPropertyCount.ToString() +
-                    titleText +
                     "\n\nBackup report:\n" +
                     result.BackupFilePath +
                     "\n\nThe document is now modified. " +

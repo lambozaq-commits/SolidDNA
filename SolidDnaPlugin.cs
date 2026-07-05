@@ -4,8 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using CADBooster.SolidDna;
 
-using SwEnvironment =
-    CADBooster.SolidDna.SolidWorksEnvironment;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -20,8 +19,6 @@ namespace SolidDNA
         // Keep this ID stable. SolidDNA clears the previous command-group
         // customization by default when it recreates this tab.
         private const int CommandTabId = 180001;
-
-        private static SolidDnaPlugin currentInstance;
 
         private TaskpaneIntegration<
             CabinToolsTaskpaneHost,
@@ -46,51 +43,15 @@ namespace SolidDNA
 
         public override void ConnectedToSolidWorks()
         {
-            currentInstance = this;
             CreateCommandTab();
             CreateTaskpane();
         }
 
         public override void DisconnectedFromSolidWorks()
         {
-            if (object.ReferenceEquals(currentInstance, this))
-            {
-                currentInstance = null;
-            }
-
             // TaskpaneIntegration automatically removes the taskpane when the
             // parent SolidAddIn disconnects. Do not dispose it here a second
             // time.
-        }
-
-        internal static void EnsureCabinToolsTaskpane()
-        {
-            SolidDnaPlugin instance = currentInstance;
-
-            if (instance == null)
-            {
-                WriteStartupWarning(
-                    "Cabin Tools taskpane cannot be created because the plug-in is not connected.");
-                return;
-            }
-
-            if (instance.cabinToolsTaskpane != null &&
-                CabinToolsTaskpaneHost.Instance == null)
-            {
-                try
-                {
-                    instance.cabinToolsTaskpane.RemoveFromTaskpane();
-                }
-                catch
-                {
-                    // A stale taskpane view can already be gone in SOLIDWORKS.
-                }
-
-                instance.cabinToolsTaskpane = null;
-            }
-
-            instance.CreateTaskpane();
-            CabinToolsTaskpaneHost.RefreshActiveDocument();
         }
 
         private void CreateCommandTab()
@@ -164,7 +125,7 @@ namespace SolidDNA
                         commandIconPathFormat,
                     tooltip: "Custom property tools",
                     hint:
-                        "Check and reorder general custom properties.",
+                        "Check properties and synchronize drawing title properties.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -250,12 +211,6 @@ namespace SolidDNA
         {
             try
             {
-                if (cabinToolsTaskpane != null)
-                {
-                    CabinToolsTaskpaneHost.RefreshActiveDocument();
-                    return;
-                }
-
                 string taskpaneIconPath =
                     Path.Combine(
                         this.AssemblyDirectoryPath(),
@@ -264,9 +219,6 @@ namespace SolidDNA
 
                 if (!File.Exists(taskpaneIconPath))
                 {
-                    WriteStartupWarning(
-                        "Cabin Tools taskpane icon was not found.\n\n" +
-                        taskpaneIconPath);
                     return;
                 }
 
@@ -285,12 +237,9 @@ namespace SolidDNA
                 // CommandManager tools must remain available even if SOLIDWORKS
                 // rejects the taskpane host. Avoid a startup exception that could
                 // disable the whole add-in.
-                cabinToolsTaskpane = null;
-
                 WriteStartupWarning(
                     "Cabin Tools taskpane was not created.\n\n" +
-                    ex.Message +
-                    "\n\nClose SOLIDWORKS, rebuild, then re-register the add-in so Windows registers the Cabin Tools taskpane COM host.");
+                    ex.Message);
             }
         }
 
@@ -397,6 +346,26 @@ namespace SolidDNA
                         args.Result =
                             CabinToolsCommandState
                                 .ForSupportedDocument()
+                },
+
+                new CommandManagerItem
+                {
+                    Name = "Synchronize Title2 / Title3",
+                    Tooltip =
+                        "Synchronize drawing title properties.",
+                    Hint =
+                        "Update Title2 and Title3 from the active drawing naming properties without saving automatically.",
+                    ImageIndex = 1,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        DrawingTitlePropertyCommand
+                            .SynchronizeActiveDrawingTitles,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForDrawing()
                 }
             };
         }
@@ -408,42 +377,22 @@ namespace SolidDNA
             {
                 new CommandManagerItem
                 {
-                    Name = "Export PDFs - Auto Name",
+                    Name = "Export PDF",
                     Tooltip =
-                        "Export one or more drawings to automatically named PDFs.",
+                        "Export the active drawing to PDF.",
                     Hint =
-                        "Select multiple drawings. PDF names are generated from drawing properties; rows with missing values are marked ! and skipped.",
+                        "Synchronize drawing title properties and export all sheets to one user-selected PDF file.",
                     ImageIndex = 2,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
                     VisibleForParts = true,
                     OnClick =
                         PdfExportCommand
-                            .ShowAutoNamedBatchExport,
+                            .ExportActiveDrawingToPdf,
                     OnStateCheck = args =>
                         args.Result =
-                            CommandManagerItemState
-                                .DeselectedEnabled
-                },
-
-                new CommandManagerItem
-                {
-                    Name = "Export PDFs - Manual Name",
-                    Tooltip =
-                        "Export one or more drawings to manually named PDFs.",
-                    Hint =
-                        "Select multiple drawings, edit each PDF filename, and export checked rows or all valid rows. Missing drawing properties are shown but do not block manual naming.",
-                    ImageIndex = 2,
-                    VisibleForDrawings = true,
-                    VisibleForAssemblies = true,
-                    VisibleForParts = true,
-                    OnClick =
-                        PdfExportCommand
-                            .ShowManualNamedBatchExport,
-                    OnStateCheck = args =>
-                        args.Result =
-                            CommandManagerItemState
-                                .DeselectedEnabled
+                            CabinToolsCommandState
+                                .ForDrawing()
                 },
 
                 new CommandManagerItem
@@ -522,24 +471,6 @@ namespace SolidDNA
 
                 new CommandManagerItem
                 {
-                    Name = "Show / Refresh Cabin Tools Taskpane",
-                    Tooltip =
-                        "Create or refresh the Cabin Tools taskpane.",
-                    Hint =
-                        "Retry taskpane creation and refresh the active document information.",
-                    ImageIndex = 5,
-                    VisibleForDrawings = true,
-                    VisibleForAssemblies = true,
-                    VisibleForParts = true,
-                    OnClick = EnsureCabinToolsTaskpane,
-                    OnStateCheck = args =>
-                        args.Result =
-                            CommandManagerItemState
-                                .DeselectedEnabled
-                },
-
-                new CommandManagerItem
-                {
                     Name = "Test Connection",
                     Tooltip =
                         "Confirm that Cabin Tools is connected.",
@@ -560,7 +491,7 @@ namespace SolidDNA
 
         private static void ShowTestConnection()
         {
-            SwEnvironment.Application.ShowMessageBox(
+            IApplication.ShowMessageBox(
                 "Cabin Tools SolidDNA is connected.\n\n" +
                 "CommandManager flyouts, taskpane hosting, " +
                 "active-document refresh, and the custom-property " +
@@ -573,7 +504,7 @@ namespace SolidDNA
         {
             try
             {
-                SwEnvironment.Application.ShowMessageBox(
+                IApplication.ShowMessageBox(
                     message,
                     SolidWorksMessageBoxIcon.Warning);
             }

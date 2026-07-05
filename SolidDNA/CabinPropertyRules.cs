@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -51,15 +51,6 @@ namespace SolidDNA
         public Dictionary<string, int> CurrentPositions { get; set; }
         public bool PriorityOrderCorrect { get; set; }
         public string RepairBlockReason { get; set; }
-
-        public bool IsDrawing { get; set; }
-        public CabinNamingValues NamingValues { get; set; }
-        public string ExpectedTitle2 { get; set; }
-        public string ExpectedTitle3 { get; set; }
-        public string CurrentTitle2 { get; set; }
-        public string CurrentTitle3 { get; set; }
-        public bool Title2Synchronized { get; set; }
-        public bool Title3Synchronized { get; set; }
 
         public bool CanRepair
         {
@@ -154,47 +145,6 @@ namespace SolidDNA
                     ? "Correct"
                     : "Needs reorder"));
 
-            if (IsDrawing)
-            {
-                report.AppendLine();
-                report.AppendLine(
-                    "DRAWING TITLE SYNCHRONIZATION");
-
-                report.AppendLine(
-                    "Title2 expected: " +
-                    CabinPropertyRules.DisplayValue(
-                        ExpectedTitle2));
-
-                report.AppendLine(
-                    "Title2 current:  " +
-                    CabinPropertyRules.DisplayValue(
-                        CurrentTitle2));
-
-                report.AppendLine(
-                    "Title2 state: " +
-                    (Title2Synchronized
-                        ? "Synchronized"
-                        : "Needs repair"));
-
-                report.AppendLine();
-
-                report.AppendLine(
-                    "Title3 expected: " +
-                    CabinPropertyRules.DisplayValue(
-                        ExpectedTitle3));
-
-                report.AppendLine(
-                    "Title3 current:  " +
-                    CabinPropertyRules.DisplayValue(
-                        CurrentTitle3));
-
-                report.AppendLine(
-                    "Title3 state: " +
-                    (Title3Synchronized
-                        ? "Synchronized"
-                        : "Needs repair"));
-            }
-
             report.AppendLine();
 
             if (CanRepair)
@@ -227,7 +177,6 @@ namespace SolidDNA
         public string BackupFilePath { get; set; }
         public List<string> AddedProperties { get; set; }
         public int ReorderedPropertyCount { get; set; }
-        public bool TitlePropertiesSynchronized { get; set; }
     }
 
     internal static class CabinPropertyRules
@@ -239,31 +188,6 @@ namespace SolidDNA
         public const string CabinTypeDefinedProperty =
             "Cabin type defined";
         public const string LayoutTypeProperty = "Layout type";
-
-        public const string Title2Property = "Title2";
-        public const string Title3Property = "Title3";
-
-        public static string BuildTitle2(
-            string cabinTypeDescription)
-        {
-            return Clean(cabinTypeDescription);
-        }
-
-        public static string BuildTitle3(
-            string cabinTypeDefined,
-            string layoutType)
-        {
-            string definedValue = Clean(cabinTypeDefined);
-            string layoutValue = Clean(layoutType);
-
-            if (string.IsNullOrWhiteSpace(definedValue))
-                return layoutValue;
-
-            if (string.IsNullOrWhiteSpace(layoutValue))
-                return definedValue;
-
-            return definedValue + " - " + layoutValue;
-        }
 
         public static string BuildPdfFileName(
             CabinNamingValues values)
@@ -664,37 +588,6 @@ namespace SolidDNA
                 values.LayoutType);
         }
 
-        public static bool SynchronizeDerivedTitleProperties(
-            IModelDoc2 drawingDoc)
-        {
-            if (!IsDrawing(drawingDoc))
-                return false;
-
-            CabinNamingValues values =
-                ReadNamingValues(drawingDoc);
-
-            string expectedTitle2 =
-                CabinPropertyRules.BuildTitle2(
-                    values.CabinTypeDescription);
-
-            string expectedTitle3 =
-                CabinPropertyRules.BuildTitle3(
-                    values.CabinTypeDefined,
-                    values.LayoutType);
-
-            bool title2Changed = WriteTextPropertyIfChanged(
-                drawingDoc,
-                CabinPropertyRules.Title2Property,
-                expectedTitle2);
-
-            bool title3Changed = WriteTextPropertyIfChanged(
-                drawingDoc,
-                CabinPropertyRules.Title3Property,
-                expectedTitle3);
-
-            return title2Changed || title3Changed;
-        }
-
         public static PropertyCheckResult Analyze(
             IModelDoc2 modelDoc,
             PropertyOrderDefinition definition)
@@ -729,56 +622,6 @@ namespace SolidDNA
                     definition.PriorityPropertyNames,
                     positions);
 
-            bool isDrawing = IsDrawing(modelDoc);
-
-            CabinNamingValues namingValues =
-                isDrawing
-                    ? ReadNamingValues(modelDoc)
-                    : null;
-
-            string expectedTitle2 = string.Empty;
-            string expectedTitle3 = string.Empty;
-            string currentTitle2 = string.Empty;
-            string currentTitle3 = string.Empty;
-            bool title2Synchronized = true;
-            bool title3Synchronized = true;
-
-            if (isDrawing)
-            {
-                expectedTitle2 =
-                    CabinPropertyRules.BuildTitle2(
-                        namingValues.CabinTypeDescription);
-
-                expectedTitle3 =
-                    CabinPropertyRules.BuildTitle3(
-                        namingValues.CabinTypeDefined,
-                        namingValues.LayoutType);
-
-                currentTitle2 = ReadResolvedProperty(
-                    modelDoc,
-                    CabinPropertyRules.Title2Property);
-
-                currentTitle3 = ReadResolvedProperty(
-                    modelDoc,
-                    CabinPropertyRules.Title3Property);
-
-                title2Synchronized =
-                    positions.ContainsKey(
-                        CabinPropertyRules.Title2Property) &&
-                    string.Equals(
-                        currentTitle2,
-                        expectedTitle2,
-                        StringComparison.Ordinal);
-
-                title3Synchronized =
-                    positions.ContainsKey(
-                        CabinPropertyRules.Title3Property) &&
-                    string.Equals(
-                        currentTitle3,
-                        expectedTitle3,
-                        StringComparison.Ordinal);
-            }
-
             return new PropertyCheckResult
             {
                 DocumentTypeName = GetDocumentTypeName(modelDoc),
@@ -787,15 +630,7 @@ namespace SolidDNA
                 MissingOrBlankProperties = missingOrBlank,
                 CurrentPositions = positions,
                 PriorityOrderCorrect = priorityOrderCorrect,
-                RepairBlockReason = GetRepairBlockReason(modelDoc),
-                IsDrawing = isDrawing,
-                NamingValues = namingValues,
-                ExpectedTitle2 = expectedTitle2,
-                ExpectedTitle3 = expectedTitle3,
-                CurrentTitle2 = currentTitle2,
-                CurrentTitle3 = currentTitle3,
-                Title2Synchronized = title2Synchronized,
-                Title3Synchronized = title3Synchronized
+                RepairBlockReason = GetRepairBlockReason(modelDoc)
             };
         }
 
@@ -878,17 +713,13 @@ namespace SolidDNA
                     modelDoc,
                     definition.PriorityPropertyNames);
 
-                bool titlesChanged =
-                    SynchronizeDerivedTitleProperties(modelDoc);
-
                 modelDoc.ForceRebuild3(false);
 
                 return new PropertyRepairResult
                 {
                     BackupFilePath = backupFilePath,
                     AddedProperties = addedProperties,
-                    ReorderedPropertyCount = orderedProperties.Count,
-                    TitlePropertiesSynchronized = titlesChanged
+                    ReorderedPropertyCount = orderedProperties.Count
                 };
             }
             catch (Exception ex)
@@ -936,36 +767,6 @@ namespace SolidDNA
             return value == null
                 ? string.Empty
                 : value.Trim();
-        }
-
-        private static bool WriteTextPropertyIfChanged(
-            IModelDoc2 modelDoc,
-            string propertyName,
-            string expectedValue)
-        {
-            List<CustomPropertySnapshot> properties =
-                ReadAllGeneralProperties(modelDoc);
-
-            CustomPropertySnapshot existing =
-                FindSnapshot(properties, propertyName);
-
-            if (existing != null &&
-                existing.Type ==
-                    (int)swCustomInfoType_e.swCustomInfoText &&
-                string.Equals(
-                    existing.RawValue ?? string.Empty,
-                    expectedValue ?? string.Empty,
-                    StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            WriteTextProperty(
-                modelDoc,
-                propertyName,
-                expectedValue);
-
-            return true;
         }
 
         private static void WriteTextProperty(
