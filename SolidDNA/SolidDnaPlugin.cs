@@ -400,6 +400,26 @@ namespace SolidDNA
 
                 new CommandManagerItem
                 {
+                    Name = "Assign Configuration Part Numbers",
+                    Tooltip =
+                        "Assign SOLIDWORKS BOM part numbers to configurations in bulk.",
+                    Hint =
+                        "Fill, review, and apply configuration part numbers. Existing numbers are protected unless overwrite is enabled.",
+                    ImageIndex = 1,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        ConfigurationPartNumberCommand
+                            .ShowConfigurationPartNumberForm,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForPartOrAssembly()
+                },
+
+                new CommandManagerItem
+                {
                     Name = "Set Cut-List Profile Properties",
                     Tooltip =
                         "Manually assign Top Profile, Bottom Profile, or custom cut-list properties.",
@@ -634,6 +654,30 @@ namespace SolidDNA
             return modelDoc != null &&
                    modelDoc.GetType() ==
                        (int)swDocumentTypes_e.swDocPART
+                ? CommandManagerItemState
+                    .DeselectedEnabled
+                : CommandManagerItemState
+                    .DeselectedDisabled;
+        }
+
+        public static CommandManagerItemState ForPartOrAssembly()
+        {
+            SolidWorks.Interop.sldworks.IModelDoc2 modelDoc =
+                CabinCustomPropertyStore
+                    .GetActiveModelDocument();
+
+            if (modelDoc == null)
+            {
+                return CommandManagerItemState
+                    .DeselectedDisabled;
+            }
+
+            int documentType = modelDoc.GetType();
+
+            return documentType ==
+                       (int)swDocumentTypes_e.swDocPART ||
+                   documentType ==
+                       (int)swDocumentTypes_e.swDocASSEMBLY
                 ? CommandManagerItemState
                     .DeselectedEnabled
                 : CommandManagerItemState
