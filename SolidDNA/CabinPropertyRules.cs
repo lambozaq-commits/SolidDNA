@@ -479,6 +479,9 @@ namespace SolidDNA
 
     internal static class CabinPropertyService
     {
+        private const string Title2Property = "Title2";
+        private const string Title3Property = "Title3";
+
         public static bool IsSupportedDocument(
             IModelDoc2 modelDoc)
         {
@@ -529,6 +532,89 @@ namespace SolidDNA
             return modelDoc != null &&
                    modelDoc.GetType() ==
                        (int)swDocumentTypes_e.swDocDRAWING;
+        }
+
+        public static bool SynchronizeDerivedTitleProperties(
+            IModelDoc2 modelDoc)
+        {
+            if (!IsDrawing(modelDoc))
+            {
+                throw new InvalidOperationException(
+                    "Title2 and Title3 can be synchronized only for a drawing.");
+            }
+
+            CabinNamingValues values =
+                ReadNamingValues(modelDoc);
+
+            string title2 =
+                CabinPropertyRules.Clean(
+                    values.CabinTypeDescription);
+
+            string cabinTypeDefined =
+                CabinPropertyRules.Clean(
+                    values.CabinTypeDefined);
+
+            string layoutType =
+                CabinPropertyRules.Clean(
+                    values.LayoutType);
+
+            string title3;
+
+            if (string.IsNullOrWhiteSpace(cabinTypeDefined))
+            {
+                title3 = layoutType;
+            }
+            else if (string.IsNullOrWhiteSpace(layoutType))
+            {
+                title3 = cabinTypeDefined;
+            }
+            else
+            {
+                title3 =
+                    cabinTypeDefined +
+                    " - " +
+                    layoutType;
+            }
+
+            string currentTitle2 =
+                ReadResolvedProperty(
+                    modelDoc,
+                    Title2Property);
+
+            string currentTitle3 =
+                ReadResolvedProperty(
+                    modelDoc,
+                    Title3Property);
+
+            bool title2Changed =
+                !string.Equals(
+                    currentTitle2,
+                    title2,
+                    StringComparison.Ordinal);
+
+            bool title3Changed =
+                !string.Equals(
+                    currentTitle3,
+                    title3,
+                    StringComparison.Ordinal);
+
+            if (title2Changed)
+            {
+                WriteTextProperty(
+                    modelDoc,
+                    Title2Property,
+                    title2);
+            }
+
+            if (title3Changed)
+            {
+                WriteTextProperty(
+                    modelDoc,
+                    Title3Property,
+                    title3);
+            }
+
+            return title2Changed || title3Changed;
         }
 
         public static CabinNamingValues ReadNamingValues(

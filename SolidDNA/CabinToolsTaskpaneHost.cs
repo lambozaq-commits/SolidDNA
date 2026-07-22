@@ -39,6 +39,7 @@ namespace SolidDNA
         private Button refreshButton;
         private Button saveDescriptionsButton;
         private Button propertyCheckerButton;
+        private Button cutListProfilesButton;
         private Button exportAutoPdfButton;
         private Button exportManualPdfButton;
 
@@ -448,6 +449,13 @@ namespace SolidDNA
             propertyCheckerButton.Click +=
                 PropertyCheckerButton_Click;
 
+            cutListProfilesButton = new Button();
+            cutListProfilesButton.Text =
+                "Set cut-list properties";
+            cutListProfilesButton.AutoSize = true;
+            cutListProfilesButton.Click +=
+                CutListProfilesButton_Click;
+
             exportAutoPdfButton = new Button();
             exportAutoPdfButton.Text = "Export PDFs (Auto)";
             exportAutoPdfButton.AutoSize = true;
@@ -463,6 +471,7 @@ namespace SolidDNA
             buttonPanel.Controls.Add(refreshButton);
             buttonPanel.Controls.Add(saveDescriptionsButton);
             buttonPanel.Controls.Add(propertyCheckerButton);
+            buttonPanel.Controls.Add(cutListProfilesButton);
             buttonPanel.Controls.Add(exportAutoPdfButton);
             buttonPanel.Controls.Add(exportManualPdfButton);
 
@@ -609,6 +618,9 @@ namespace SolidDNA
 
                 exportAutoPdfButton.Enabled = true;
                 exportManualPdfButton.Enabled = true;
+                cutListProfilesButton.Enabled =
+                    activeDocument.GetType() ==
+                    (int)SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART;
 
                 saveDescriptionsButton.Enabled = true;
 
@@ -633,6 +645,7 @@ namespace SolidDNA
                     ex.Message;
 
                 saveDescriptionsButton.Enabled = false;
+                cutListProfilesButton.Enabled = false;
                 exportAutoPdfButton.Enabled = true;
                 exportManualPdfButton.Enabled = true;
             }
@@ -667,6 +680,7 @@ namespace SolidDNA
                 "(not available)";
 
             saveDescriptionsButton.Enabled = false;
+            cutListProfilesButton.Enabled = false;
             exportAutoPdfButton.Enabled = true;
             exportManualPdfButton.Enabled = true;
 
@@ -786,6 +800,15 @@ namespace SolidDNA
             EventArgs e)
         {
             PropertyOrganizerCommand.ShowOrganizer();
+            RefreshFromActiveDocument();
+        }
+
+        private void CutListProfilesButton_Click(
+            object sender,
+            EventArgs e)
+        {
+            CutListProfilePropertyCommand
+                .UpdateActivePartTopBottomProfiles();
             RefreshFromActiveDocument();
         }
 

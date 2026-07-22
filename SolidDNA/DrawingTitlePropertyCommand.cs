@@ -62,7 +62,7 @@ namespace SolidDNA
         {
             CADBooster.SolidDna
                 .SolidWorksEnvironment
-                .Application
+                .IApplication
                 .ShowMessageBox(
                     message,
                     SolidWorksMessageBoxIcon.Information);
@@ -72,7 +72,7 @@ namespace SolidDNA
         {
             CADBooster.SolidDna
                 .SolidWorksEnvironment
-                .Application
+                .IApplication
                 .ShowMessageBox(
                     message,
                     SolidWorksMessageBoxIcon.Stop);

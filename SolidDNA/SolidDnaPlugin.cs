@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using CADBooster.SolidDna;
+using SolidWorks.Interop.swconst;
 
-using SwEnvironment =
-    CADBooster.SolidDna.SolidWorksEnvironment;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -40,7 +40,7 @@ namespace SolidDNA
             get
             {
                 return
-                    "Cabin drawing, custom-property, and document utilities.";
+                    "Cabin drawing, cut-list, custom-property, and document utilities.";
             }
         }
 
@@ -95,9 +95,8 @@ namespace SolidDNA
 
         private void CreateCommandTab()
         {
-            CommandManager commandManager =
-                SolidDnaAddIn.Instance
-                    .CommandManager;
+            CADBooster.SolidDna.CommandManager commandManager =
+                SolidDnaAddIn.Instance.CommandManager;
 
             string resourcesDirectory =
                 Path.Combine(
@@ -397,6 +396,26 @@ namespace SolidDNA
                         args.Result =
                             CabinToolsCommandState
                                 .ForSupportedDocument()
+                },
+
+                new CommandManagerItem
+                {
+                    Name = "Set Cut-List Profile Properties",
+                    Tooltip =
+                        "Manually assign Top Profile, Bottom Profile, or custom cut-list properties.",
+                    Hint =
+                        "Select cut-list rows and write DESCRIPTION, BRAND, MODEL, plus optional custom properties.",
+                    ImageIndex = 1,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        CutListProfilePropertyCommand
+                            .UpdateActivePartTopBottomProfiles,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForPart()
                 }
             };
         }
@@ -560,7 +579,7 @@ namespace SolidDNA
 
         private static void ShowTestConnection()
         {
-            SwEnvironment.Application.ShowMessageBox(
+            IApplication.ShowMessageBox(
                 "Cabin Tools SolidDNA is connected.\n\n" +
                 "CommandManager flyouts, taskpane hosting, " +
                 "active-document refresh, and the custom-property " +
@@ -573,7 +592,7 @@ namespace SolidDNA
         {
             try
             {
-                SwEnvironment.Application.ShowMessageBox(
+                IApplication.ShowMessageBox(
                     message,
                     SolidWorksMessageBoxIcon.Warning);
             }
@@ -600,6 +619,21 @@ namespace SolidDNA
                 .IsSupportedDocument(
                     CabinCustomPropertyStore
                         .GetActiveModelDocument())
+                ? CommandManagerItemState
+                    .DeselectedEnabled
+                : CommandManagerItemState
+                    .DeselectedDisabled;
+        }
+
+        public static CommandManagerItemState ForPart()
+        {
+            SolidWorks.Interop.sldworks.IModelDoc2 modelDoc =
+                CabinCustomPropertyStore
+                    .GetActiveModelDocument();
+
+            return modelDoc != null &&
+                   modelDoc.GetType() ==
+                       (int)swDocumentTypes_e.swDocPART
                 ? CommandManagerItemState
                     .DeselectedEnabled
                 : CommandManagerItemState

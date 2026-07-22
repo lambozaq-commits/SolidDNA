@@ -12,6 +12,9 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <!-- Prevent duplicate assembly attributes when this project is opened/builds as an SDK-style or VS-generated assembly-info project. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -125,6 +128,11 @@
     <Compile Include="CabinPropertyRules.cs" />
     <Compile Include="CabinToolsTaskpaneHost.cs">
       <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="CutListProfilePropertyCommand.cs" />
+    <Compile Include="DrawingTitlePropertyCommand.cs" />
+    <Compile Include="PdfPropertyForm.cs">
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="PreviousVersionDrawingCommand.cs" />
     <Compile Include="PreviousVersionDrawingForm.cs">
@@ -262,5 +270,11 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="SheetFormatForm.resx">
+      <DependentUpon>SheetFormatForm.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
