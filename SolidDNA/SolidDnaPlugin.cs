@@ -400,11 +400,11 @@ namespace SolidDNA
 
                 new CommandManagerItem
                 {
-                    Name = "Assign Configuration Part Numbers",
+                    Name = "Configuration Property Editor",
                     Tooltip =
-                        "Assign SOLIDWORKS BOM part numbers to configurations in bulk.",
+                        "Edit configuration BOM part numbers and configuration custom properties in bulk.",
                     Hint =
-                        "Fill, review, and apply configuration part numbers. Existing numbers are protected unless overwrite is enabled.",
+                        "Fill, review, and apply configuration BOM part numbers and selected configuration custom-property columns.",
                     ImageIndex = 1,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
@@ -420,9 +420,9 @@ namespace SolidDNA
 
                 new CommandManagerItem
                 {
-                    Name = "Set Cut-List Profile Properties",
+                    Name = "Cut-List Property Editor",
                     Tooltip =
-                        "Manually assign Top Profile, Bottom Profile, or custom cut-list properties.",
+                        "Edit selected cut-list property columns in bulk.",
                     Hint =
                         "Select cut-list rows and write DESCRIPTION, BRAND, MODEL, plus optional custom properties.",
                     ImageIndex = 1,
@@ -436,6 +436,46 @@ namespace SolidDNA
                         args.Result =
                             CabinToolsCommandState
                                 .ForPart()
+                },
+
+                new CommandManagerItem
+                {
+                    Name = "Reference Mate Assistant",
+                    Tooltip =
+                        "Mate selected component reference geometry to assembly reference geometry and Basic Sketch references.",
+                    Hint =
+                        "Select one component, browse component planes/sketch lines and assembly Basic Sketch references, then create mates with Create and Continue.",
+                    ImageIndex = 1,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        ReferenceMateAssistantCommand
+                            .ShowReferenceMateAssistantForm,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForAssembly()
+                },
+
+                new CommandManagerItem
+                {
+                    Name = "Wall Panel Configuration Manager",
+                    Tooltip =
+                        "Change wall panel referenced configurations in bulk while preserving width and length.",
+                    Hint =
+                        "Preview and apply reinforcement-scheme or exact-configuration changes to selected panels, all recognised panels, or selected assembly configurations.",
+                    ImageIndex = 1,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        WallPanelConfigurationManagerCommand
+                            .ShowWallPanelManagerForm,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForAssembly()
                 }
             };
         }
@@ -677,6 +717,21 @@ namespace SolidDNA
             return documentType ==
                        (int)swDocumentTypes_e.swDocPART ||
                    documentType ==
+                       (int)swDocumentTypes_e.swDocASSEMBLY
+                ? CommandManagerItemState
+                    .DeselectedEnabled
+                : CommandManagerItemState
+                    .DeselectedDisabled;
+        }
+
+        public static CommandManagerItemState ForAssembly()
+        {
+            SolidWorks.Interop.sldworks.IModelDoc2 modelDoc =
+                CabinCustomPropertyStore
+                    .GetActiveModelDocument();
+
+            return modelDoc != null &&
+                   modelDoc.GetType() ==
                        (int)swDocumentTypes_e.swDocASSEMBLY
                 ? CommandManagerItemState
                     .DeselectedEnabled
