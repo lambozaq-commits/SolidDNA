@@ -15,16 +15,19 @@ using SwEnvironment =
 namespace SolidDNA
 {
     /// <summary>
-    /// Shows a controlled form for assigning cut-list properties to profile
-    /// cut-list items. This command deliberately does not auto-detect Top
-    /// Profile or Bottom Profile. The user explicitly chooses the profile type
-    /// per cut-list item or applies one selection to all/checked rows.
+    /// Manually assigns DESCRIPTION, BRAND, MODEL, and optional custom
+    /// properties to the active configuration's visible weldment cut-list
+    /// folders.
+    ///
+    /// The cut-list grid is intentionally populated from the direct,
+    /// body-containing folders displayed below the SOLIDWORKS cut-list node.
+    /// It does not recursively add historical/internal CutListFolder features.
     /// </summary>
     internal static class CutListProfilePropertyCommand
     {
-        internal const string DescriptionPropertyName = "Description";
-        internal const string BrandPropertyName = "Brand";
-        internal const string ModelPropertyName = "Model";
+        internal const string DescriptionPropertyName = "DESCRIPTION";
+        internal const string BrandPropertyName = "BRAND";
+        internal const string ModelPropertyName = "MODEL";
 
         internal const string TopProfileName = "Top Profile";
         internal const string BottomProfileName = "Bottom Profile";
@@ -46,8 +49,7 @@ namespace SolidDNA
             try
             {
                 IModelDoc2 modelDoc =
-                    CabinCustomPropertyStore
-                        .GetActiveModelDocument();
+                    CabinCustomPropertyStore.GetActiveModelDocument();
 
                 if (modelDoc == null)
                 {
@@ -68,8 +70,7 @@ namespace SolidDNA
                 }
 
                 string writeBlockReason =
-                    CabinCustomPropertyStore
-                        .GetWriteBlockReason(modelDoc);
+                    CabinCustomPropertyStore.GetWriteBlockReason(modelDoc);
 
                 if (!string.IsNullOrWhiteSpace(writeBlockReason))
                 {
@@ -94,21 +95,27 @@ namespace SolidDNA
             }
         }
 
+        /// <summary>
+        /// Returns one row for each active, body-containing cut-list folder
+        /// shown in the FeatureManager cut-list node.
+        ///
+        /// The previous implementation recursively traversed all features and
+        /// subfeatures. That can return stale or internal CutListFolder
+        /// features and create more rows than SOLIDWORKS displays.
+        /// </summary>
         internal static List<CutListItemInfo> GetCutListItems(
             IModelDoc2 modelDoc,
             List<string> messages)
         {
-            List<CutListItemInfo> cutListItems =
+            List<CutListItemInfo> result =
                 new List<CutListItemInfo>();
 
-            if (modelDoc == null)
-                return cutListItems;
-
-            PartDoc partDoc =
-                modelDoc as PartDoc;
-
-            if (partDoc == null)
-                return cutListItems;
+            if (modelDoc == null ||
+                modelDoc.GetType() !=
+                    (int)swDocumentTypes_e.swDocPART)
+            {
+                return result;
+            }
 
             TryUpdateCutList(
                 modelDoc,
@@ -121,24 +128,576 @@ namespace SolidDNA
             }
             catch (Exception ex)
             {
-                if (messages != null)
+                AddMessage(
+                    messages,
+                    "Force rebuild before reading cut list failed: " +
+                    ex.Message);
+            }
+
+            List<Feature> visibleCutListFeatures =
+                FindDisplayedCutListFeatures(modelDoc, messages);
+
+            List<CustomPropertyManager> configurationManagers =
+                GetConfigurationCutListPropertyManagers(
+                    modelDoc,
+                    messages);
+
+            bool useConfigurationManagers =
+                configurationManagers.Count ==
+                    visibleCutListFeatures.Count &&
+                configurationManagers.Count > 0;
+
+            for (int index = 0;
+                 index < visibleCutListFeatures.Count;
+                 index++)
+            {
+                Feature feature =
+                    visibleCutListFeatures[index];
+
+                CustomPropertyManager propertyManager = null;
+
+                if (useConfigurationManagers)
                 {
-                    messages.Add(
-                        "Force rebuild before reading cut list failed: " +
+                    propertyManager =
+                        configurationManagers[index];
+                }
+
+                if (propertyManager == null)
+                {
+                    propertyManager =
+                        GetFeaturePropertyManager(feature);
+                }
+
+                CutListItemInfo item =
+                    CreateCutListItemInfo(
+                        feature,
+                        propertyManager);
+
+                if (item != null)
+                {
+                    result.Add(item);
+                }
+            }
+
+            if (result.Count == 0)
+            {
+                AddMessage(
+                    messages,
+                    "No active body-containing cut-list folders were found.");
+            }
+            else if (configurationManagers.Count > 0 &&
+                     configurationManagers.Count !=
+                         visibleCutListFeatures.Count)
+            {
+                AddMessage(
+                    messages,
+                    "The configuration API returned " +
+                    configurationManagers.Count +
+                    " cut-list item(s), while the FeatureManager displays " +
+                    visibleCutListFeatures.Count +
+                    " body-containing cut-list folder(s). " +
+                    "The displayed FeatureManager folders were used.");
+            }
+
+            return result;
+        }
+
+        private static List<Feature> FindDisplayedCutListFeatures(
+            IModelDoc2 modelDoc,
+            List<string> messages)
+        {
+            List<Feature> features =
+                new List<Feature>();
+
+            HashSet<string> keys =
+                new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase);
+
+            Feature current =
+                modelDoc.FirstFeature() as Feature;
+
+            while (current != null)
+            {
+                string typeName =
+                    SafeFeatureTypeName(current);
+
+                if (IsCutListFolder(typeName))
+                {
+                    TryAddBodyContainingCutListFeature(
+                        current,
+                        features,
+                        keys);
+                }
+                else if (IsCutListContainer(typeName))
+                {
+                    AddDirectCutListSubFeatures(
+                        current,
+                        features,
+                        keys);
+                }
+
+                current =
+                    current.GetNextFeature() as Feature;
+            }
+
+            if (features.Count > 0)
+                return features;
+
+            // Fallback for uncommon feature-tree layouts. This fallback still
+            // ignores empty folders and deduplicates folders by name/body set.
+            Feature root =
+                modelDoc.FirstFeature() as Feature;
+
+            CollectBodyContainingCutListFeaturesFallback(
+                root,
+                false,
+                features,
+                keys);
+
+            if (features.Count > 0)
+            {
+                AddMessage(
+                    messages,
+                    "The cut-list container was not found directly. " +
+                    "A filtered fallback traversal was used.");
+            }
+
+            return features;
+        }
+
+        private static void AddDirectCutListSubFeatures(
+            Feature container,
+            List<Feature> features,
+            HashSet<string> keys)
+        {
+            if (container == null)
+                return;
+
+            Feature subFeature = null;
+
+            try
+            {
+                subFeature =
+                    container.GetFirstSubFeature() as Feature;
+            }
+            catch
+            {
+                subFeature = null;
+            }
+
+            while (subFeature != null)
+            {
+                string typeName =
+                    SafeFeatureTypeName(subFeature);
+
+                if (IsCutListFolder(typeName))
+                {
+                    TryAddBodyContainingCutListFeature(
+                        subFeature,
+                        features,
+                        keys);
+                }
+                else if (IsCutListContainer(typeName))
+                {
+                    // Some versions place a CutListFolder container one level
+                    // below SolidBodyFolder. Read only its direct children.
+                    Feature nested = null;
+
+                    try
+                    {
+                        nested =
+                            subFeature.GetFirstSubFeature()
+                                as Feature;
+                    }
+                    catch
+                    {
+                        nested = null;
+                    }
+
+                    while (nested != null)
+                    {
+                        if (IsCutListFolder(
+                                SafeFeatureTypeName(nested)))
+                        {
+                            TryAddBodyContainingCutListFeature(
+                                nested,
+                                features,
+                                keys);
+                        }
+
+                        nested =
+                            nested.GetNextSubFeature()
+                                as Feature;
+                    }
+                }
+
+                subFeature =
+                    subFeature.GetNextSubFeature()
+                        as Feature;
+            }
+        }
+
+        private static void CollectBodyContainingCutListFeaturesFallback(
+            Feature feature,
+            bool featureIsSubFeature,
+            List<Feature> features,
+            HashSet<string> keys)
+        {
+            Feature current = feature;
+
+            while (current != null)
+            {
+                string typeName =
+                    SafeFeatureTypeName(current);
+
+                if (IsCutListFolder(typeName))
+                {
+                    TryAddBodyContainingCutListFeature(
+                        current,
+                        features,
+                        keys);
+
+                    // Do not recurse into a cut-list item. Internal children
+                    // are not independent grid rows.
+                }
+                else
+                {
+                    Feature child = null;
+
+                    try
+                    {
+                        child =
+                            current.GetFirstSubFeature()
+                                as Feature;
+                    }
+                    catch
+                    {
+                        child = null;
+                    }
+
+                    if (child != null)
+                    {
+                        CollectBodyContainingCutListFeaturesFallback(
+                            child,
+                            true,
+                            features,
+                            keys);
+                    }
+                }
+
+                current =
+                    featureIsSubFeature
+                        ? current.GetNextSubFeature() as Feature
+                        : current.GetNextFeature() as Feature;
+            }
+        }
+
+        private static void TryAddBodyContainingCutListFeature(
+            Feature feature,
+            List<Feature> features,
+            HashSet<string> keys)
+        {
+            if (feature == null)
+                return;
+
+            List<string> bodyNames =
+                GetCutListBodyNames(feature);
+
+            if (bodyNames.Count == 0)
+                return;
+
+            string key =
+                BuildCutListFeatureKey(
+                    feature,
+                    bodyNames);
+
+            if (keys.Add(key))
+            {
+                features.Add(feature);
+            }
+        }
+
+        private static string BuildCutListFeatureKey(
+            Feature feature,
+            IList<string> bodyNames)
+        {
+            StringBuilder builder =
+                new StringBuilder();
+
+            builder.Append(
+                SafeFeatureName(feature));
+            builder.Append("|");
+
+            if (bodyNames != null)
+            {
+                for (int index = 0;
+                     index < bodyNames.Count;
+                     index++)
+                {
+                    if (index > 0)
+                        builder.Append(";");
+
+                    builder.Append(
+                        bodyNames[index] ?? string.Empty);
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private static bool IsCutListFolder(
+            string typeName)
+        {
+            return string.Equals(
+                typeName,
+                "CutListFolder",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsCutListContainer(
+            string typeName)
+        {
+            return string.Equals(
+                       typeName,
+                       "SolidBodyFolder",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(
+                       typeName,
+                       "Weldment",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(
+                       typeName,
+                       "WeldmentFeature",
+                       StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static List<CustomPropertyManager>
+            GetConfigurationCutListPropertyManagers(
+                IModelDoc2 modelDoc,
+                List<string> messages)
+        {
+            List<CustomPropertyManager> managers =
+                new List<CustomPropertyManager>();
+
+            Configuration activeConfiguration = null;
+
+            try
+            {
+                ConfigurationManager configurationManager =
+                    modelDoc.ConfigurationManager;
+
+                if (configurationManager != null)
+                {
+                    activeConfiguration =
+                        configurationManager.ActiveConfiguration;
+                }
+            }
+            catch (Exception ex)
+            {
+                AddMessage(
+                    messages,
+                    "Could not obtain the active configuration: " +
+                    ex.Message);
+                return managers;
+            }
+
+            if (activeConfiguration == null)
+                return managers;
+
+            object cutListItemsObject = null;
+
+            try
+            {
+                cutListItemsObject =
+                    activeConfiguration.GetCutListItems();
+            }
+            catch (Exception ex)
+            {
+                AddMessage(
+                    messages,
+                    "The active configuration cut-list API could not be read: " +
+                    ex.Message);
+                return managers;
+            }
+
+            Array cutListItems =
+                cutListItemsObject as Array;
+
+            if (cutListItems == null)
+                return managers;
+
+            foreach (object rawItem in cutListItems)
+            {
+                ICutListItem cutListItem =
+                    rawItem as ICutListItem;
+
+                if (cutListItem == null)
+                    continue;
+
+                try
+                {
+                    CustomPropertyManager manager =
+                        cutListItem.CustomPropertyManager;
+
+                    if (manager != null)
+                    {
+                        managers.Add(manager);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AddMessage(
+                        messages,
+                        "A configuration-specific cut-list property manager " +
+                        "could not be read: " +
                         ex.Message);
                 }
             }
 
-            Feature rootFeature =
-                modelDoc.FirstFeature() as Feature;
+            return managers;
+        }
 
-            TraverseFeatures(
-                rootFeature,
-                cutListItems,
-                0,
-                false);
+        private static CutListItemInfo CreateCutListItemInfo(
+            Feature feature,
+            CustomPropertyManager propertyManager)
+        {
+            if (feature == null)
+                return null;
 
-            return cutListItems;
+            CutListItemInfo item =
+                new CutListItemInfo();
+
+            item.Feature = feature;
+            item.PropertyManager = propertyManager;
+            item.FeatureName =
+                SafeFeatureName(feature);
+            item.FeatureTypeName =
+                SafeFeatureTypeName(feature);
+            item.FeatureDepth = 0;
+            item.BodyNames =
+                GetCutListBodyNames(feature);
+
+            item.ExistingDescription =
+                ReadPropertyText(
+                    propertyManager,
+                    DescriptionPropertyName,
+                    "Description");
+
+            item.ExistingBrand =
+                ReadPropertyText(
+                    propertyManager,
+                    BrandPropertyName,
+                    "Brand");
+
+            item.ExistingModel =
+                ReadPropertyText(
+                    propertyManager,
+                    ModelPropertyName,
+                    "Model");
+
+            return item;
+        }
+
+        private static List<string> GetCutListBodyNames(
+            Feature feature)
+        {
+            List<string> bodyNames =
+                new List<string>();
+
+            if (feature == null)
+                return bodyNames;
+
+            object specificFeature = null;
+
+            try
+            {
+                specificFeature =
+                    feature.GetSpecificFeature2();
+            }
+            catch
+            {
+                specificFeature = null;
+            }
+
+            BodyFolder bodyFolder =
+                specificFeature as BodyFolder;
+
+            if (bodyFolder == null)
+                return bodyNames;
+
+            object bodiesObject = null;
+
+            try
+            {
+                bodiesObject =
+                    bodyFolder.GetBodies();
+            }
+            catch
+            {
+                bodiesObject = null;
+            }
+
+            Array bodies =
+                bodiesObject as Array;
+
+            if (bodies == null)
+                return bodyNames;
+
+            foreach (object rawBody in bodies)
+            {
+                Body2 body =
+                    rawBody as Body2;
+
+                if (body == null)
+                    continue;
+
+                string bodyName =
+                    SafeBodyName(body);
+
+                if (string.IsNullOrWhiteSpace(bodyName))
+                {
+                    bodyName =
+                        "Body " +
+                        (bodyNames.Count + 1).ToString();
+                }
+
+                bodyNames.Add(bodyName);
+            }
+
+            return bodyNames;
+        }
+
+        private static string SafeBodyName(
+            Body2 body)
+        {
+            if (body == null)
+                return string.Empty;
+
+            try
+            {
+                return body.Name ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static CustomPropertyManager
+            GetFeaturePropertyManager(
+                Feature feature)
+        {
+            if (feature == null)
+                return null;
+
+            try
+            {
+                return feature.CustomPropertyManager;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         internal static CutListWriteReport ApplyRows(
@@ -151,13 +710,11 @@ namespace SolidDNA
                     "No active SOLIDWORKS part document was supplied.");
             }
 
-            PartDoc partDoc =
-                modelDoc as PartDoc;
-
-            if (partDoc == null)
+            if (modelDoc.GetType() !=
+                (int)swDocumentTypes_e.swDocPART)
             {
                 throw new InvalidOperationException(
-                    "The active document is not a valid SOLIDWORKS part document.");
+                    "The active document is not a SOLIDWORKS part.");
             }
 
             CutListWriteReport report =
@@ -172,6 +729,10 @@ namespace SolidDNA
             {
                 report.GeneralMessages.Add(
                     "No cut-list rows were supplied for update.");
+
+                report.ReportPath =
+                    WriteReport(modelDoc, report);
+
                 return report;
             }
 
@@ -183,79 +744,120 @@ namespace SolidDNA
                 if (!row.Apply)
                 {
                     row.Status = "Skipped";
-                    report.SkippedRows.Add(row.CloneForReport());
+                    report.SkippedRows.Add(
+                        row.CloneForReport());
                     continue;
                 }
 
                 if (row.Item == null ||
                     row.Item.PropertyManager == null)
                 {
-                    row.Status = "No property manager";
-                    report.FailedRows.Add(row.CloneForReport());
+                    row.Status =
+                        "Failed: no cut-list property manager";
+                    report.FailedRows.Add(
+                        row.CloneForReport());
                     continue;
                 }
 
-                bool writesSomething = false;
-
-                string profileType =
-                    NormalizeProfileType(row.ProfileType);
-
-                if (!string.Equals(
-                        profileType,
-                        SkipProfileName,
-                        StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    if (string.IsNullOrWhiteSpace(row.Description))
+                    bool wroteValue = false;
+
+                    string profileType =
+                        NormalizeProfileType(
+                            row.ProfileType);
+
+                    if (!string.Equals(
+                            profileType,
+                            SkipProfileName,
+                            StringComparison.OrdinalIgnoreCase))
                     {
-                        row.Status = "! DESCRIPTION is blank";
-                        report.FailedRows.Add(row.CloneForReport());
+                        if (string.IsNullOrWhiteSpace(
+                                row.Description))
+                        {
+                            row.Status =
+                                "! DESCRIPTION is blank";
+
+                            report.FailedRows.Add(
+                                row.CloneForReport());
+                            continue;
+                        }
+
+                        SetCutListTextProperty(
+                            row.Item.PropertyManager,
+                            DescriptionPropertyName,
+                            row.Description);
+
+                        SetCutListTextProperty(
+                            row.Item.PropertyManager,
+                            BrandPropertyName,
+                            row.Brand);
+
+                        SetCutListTextProperty(
+                            row.Item.PropertyManager,
+                            ModelPropertyName,
+                            row.Model);
+
+                        wroteValue = true;
+                    }
+
+                    List<KeyValuePair<string, string>>
+                        extraProperties =
+                            ParseExtraProperties(
+                                row.ExtraProperties);
+
+                    foreach (
+                        KeyValuePair<string, string> property
+                        in extraProperties)
+                    {
+                        SetCutListTextProperty(
+                            row.Item.PropertyManager,
+                            property.Key,
+                            property.Value);
+
+                        wroteValue = true;
+                    }
+
+                    if (!wroteValue)
+                    {
+                        row.Status =
+                            "Skipped: no property values selected";
+
+                        report.SkippedRows.Add(
+                            row.CloneForReport());
                         continue;
                     }
 
-                    SetCutListTextProperty(
-                        row.Item.PropertyManager,
-                        DescriptionPropertyName,
-                        row.Description);
+                    row.ExistingDescription =
+                        ReadPropertyText(
+                            row.Item.PropertyManager,
+                            DescriptionPropertyName,
+                            "Description");
 
-                    SetCutListTextProperty(
-                        row.Item.PropertyManager,
-                        BrandPropertyName,
-                        row.Brand);
+                    row.ExistingBrand =
+                        ReadPropertyText(
+                            row.Item.PropertyManager,
+                            BrandPropertyName,
+                            "Brand");
 
-                    SetCutListTextProperty(
-                        row.Item.PropertyManager,
-                        ModelPropertyName,
-                        row.Model);
+                    row.ExistingModel =
+                        ReadPropertyText(
+                            row.Item.PropertyManager,
+                            ModelPropertyName,
+                            "Model");
 
-                    writesSomething = true;
-                }
-
-                List<KeyValuePair<string, string>> extraProperties =
-                    ParseExtraProperties(
-                        row.ExtraProperties,
-                        row,
-                        report);
-
-                foreach (KeyValuePair<string, string> property in
-                    extraProperties)
-                {
-                    SetCutListTextProperty(
-                        row.Item.PropertyManager,
-                        property.Key,
-                        property.Value);
-
-                    writesSomething = true;
-                }
-
-                if (writesSomething)
-                {
                     row.Status = "Updated";
-                    report.UpdatedRows.Add(row.CloneForReport());
+
+                    report.UpdatedRows.Add(
+                        row.CloneForReport());
                 }
-                else
+                catch (Exception ex)
                 {
-                    row.Status = "Skipped - no values selected";
-                    report.SkippedRows.Add(row.CloneForReport());
+                    row.Status =
+                        "Failed: " + ex.Message;
+
+                    report.FailedRows.Add(
+                        row.CloneForReport());
                 }
             }
 
@@ -281,33 +883,9 @@ namespace SolidDNA
             return report;
         }
 
-        internal static string NormalizeProfileType(
-            string profileType)
-        {
-            if (string.IsNullOrWhiteSpace(profileType))
-                return SkipProfileName;
-
-            string value =
-                profileType.Trim();
-
-            if (string.Equals(value, TopProfileName,
-                    StringComparison.OrdinalIgnoreCase))
-                return TopProfileName;
-
-            if (string.Equals(value, BottomProfileName,
-                    StringComparison.OrdinalIgnoreCase))
-                return BottomProfileName;
-
-            if (string.Equals(value, CustomProfileName,
-                    StringComparison.OrdinalIgnoreCase))
-                return CustomProfileName;
-
-            return SkipProfileName;
-        }
-
         internal static void ApplyProfilePreset(
             CutListGridRow row,
-            string profileType,
+            string selectedPreset,
             string description,
             string brand,
             string model)
@@ -315,43 +893,196 @@ namespace SolidDNA
             if (row == null)
                 return;
 
-            string normalizedProfileType =
-                NormalizeProfileType(profileType);
+            string preset =
+                NormalizeProfileType(selectedPreset);
 
-            row.ProfileType = normalizedProfileType;
+            row.ProfileType = preset;
 
             if (string.Equals(
-                    normalizedProfileType,
+                    preset,
+                    SkipProfileName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            row.Description =
+                description ?? string.Empty;
+            row.Brand =
+                brand ?? string.Empty;
+            row.Model =
+                model ?? string.Empty;
+        }
+
+        internal static string NormalizeProfileType(
+            string profileType)
+        {
+            if (string.Equals(
+                    profileType,
                     TopProfileName,
                     StringComparison.OrdinalIgnoreCase))
             {
-                row.Description = TopDescriptionValue;
-                row.Brand = StandardBrandValue;
-                row.Model = StandardModelValue;
-                return;
+                return TopProfileName;
             }
 
             if (string.Equals(
-                    normalizedProfileType,
+                    profileType,
                     BottomProfileName,
                     StringComparison.OrdinalIgnoreCase))
             {
-                row.Description = BottomDescriptionValue;
-                row.Brand = StandardBrandValue;
-                row.Model = StandardModelValue;
-                return;
+                return BottomProfileName;
             }
 
             if (string.Equals(
-                    normalizedProfileType,
+                    profileType,
                     CustomProfileName,
                     StringComparison.OrdinalIgnoreCase))
             {
-                row.Description = description ?? string.Empty;
-                row.Brand = brand ?? string.Empty;
-                row.Model = model ?? string.Empty;
+                return CustomProfileName;
+            }
+
+            return SkipProfileName;
+        }
+
+        internal static List<KeyValuePair<string, string>>
+            ParseExtraProperties(
+                string extraPropertiesText)
+        {
+            List<KeyValuePair<string, string>> result =
+                new List<KeyValuePair<string, string>>();
+
+            if (string.IsNullOrWhiteSpace(
+                    extraPropertiesText))
+            {
+                return result;
+            }
+
+            string[] entries =
+                extraPropertiesText
+                    .Replace("\r\n", ";")
+                    .Replace("\n", ";")
+                    .Replace("\r", ";")
+                    .Split(
+                        new[] { ';' },
+                        StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (string entry in entries)
+            {
+                string trimmed =
+                    entry == null
+                        ? string.Empty
+                        : entry.Trim();
+
+                int separatorIndex =
+                    trimmed.IndexOf('=');
+
+                if (separatorIndex <= 0)
+                    continue;
+
+                string propertyName =
+                    trimmed.Substring(
+                        0,
+                        separatorIndex).Trim();
+
+                string propertyValue =
+                    trimmed.Substring(
+                        separatorIndex + 1).Trim();
+
+                if (string.IsNullOrWhiteSpace(
+                        propertyName))
+                {
+                    continue;
+                }
+
+                result.Add(
+                    new KeyValuePair<string, string>(
+                        propertyName,
+                        propertyValue));
+            }
+
+            return result;
+        }
+
+        private static void SetCutListTextProperty(
+            CustomPropertyManager propertyManager,
+            string propertyName,
+            string value)
+        {
+            if (propertyManager == null ||
+                string.IsNullOrWhiteSpace(propertyName))
+            {
                 return;
             }
+
+            propertyManager.Add3(
+                propertyName.Trim(),
+                (int)swCustomInfoType_e.swCustomInfoText,
+                value ?? string.Empty,
+                (int)swCustomPropertyAddOption_e
+                    .swCustomPropertyReplaceValue);
+        }
+
+        private static string ReadPropertyText(
+            CustomPropertyManager propertyManager,
+            params string[] possibleNames)
+        {
+            if (propertyManager == null ||
+                possibleNames == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (string propertyName in possibleNames)
+            {
+                if (string.IsNullOrWhiteSpace(
+                        propertyName))
+                {
+                    continue;
+                }
+
+                string rawValue;
+                string resolvedValue;
+                bool wasResolved;
+                bool linked;
+
+                try
+                {
+                    int result =
+                        propertyManager.Get6(
+                            propertyName,
+                            false,
+                            out rawValue,
+                            out resolvedValue,
+                            out wasResolved,
+                            out linked);
+
+                    if (result ==
+                        (int)swCustomInfoGetResult_e
+                            .swCustomInfoGetResult_NotPresent)
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(
+                            resolvedValue))
+                    {
+                        return resolvedValue.Trim();
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(
+                            rawValue))
+                    {
+                        return rawValue.Trim();
+                    }
+                }
+                catch
+                {
+                    // Some legacy cut-list items reject a property read.
+                    // Continue with the next accepted spelling.
+                }
+            }
+
+            return string.Empty;
         }
 
         private static void TryUpdateCutList(
@@ -365,55 +1096,30 @@ namespace SolidDNA
             bool updateAttempted = false;
             bool updateSucceeded = false;
 
-            try
-            {
-                Feature rootFeature =
-                    modelDoc.FirstFeature() as Feature;
+            Feature root =
+                modelDoc.FirstFeature() as Feature;
 
-                TryUpdateCutListFromFeatures(
-                    rootFeature,
-                    false,
-                    ref updateAttempted,
-                    ref updateSucceeded,
-                    messages);
-            }
-            catch (Exception ex)
-            {
-                if (messages != null)
-                {
-                    messages.Add(
-                        "Cut-list feature scan failed " +
-                        SafeContextText(context) +
-                        ": " + ex.Message);
-                }
-            }
+            TryUpdateCutListFromFeatures(
+                root,
+                false,
+                ref updateAttempted,
+                ref updateSucceeded,
+                messages);
 
-            try
+            if (!updateAttempted)
             {
-                modelDoc.ForceRebuild3(false);
-            }
-            catch (Exception ex)
-            {
-                if (messages != null)
-                {
-                    messages.Add(
-                        "Force rebuild failed " +
-                        SafeContextText(context) +
-                        ": " + ex.Message);
-                }
-            }
-
-            if (messages != null && !updateAttempted)
-            {
-                messages.Add(
+                AddMessage(
+                    messages,
                     "No SolidBodyFolder/CutListFolder update method was found " +
                     SafeContextText(context) +
                     ". The command continued after rebuild.");
             }
-            else if (messages != null && updateAttempted && !updateSucceeded)
+            else if (!updateSucceeded)
             {
-                messages.Add(
-                    "SOLIDWORKS cut-list update was attempted but did not report success " +
+                AddMessage(
+                    messages,
+                    "SOLIDWORKS cut-list update was attempted but did not " +
+                    "report success " +
                     SafeContextText(context) +
                     ". The command continued after rebuild.");
             }
@@ -426,47 +1132,50 @@ namespace SolidDNA
             ref bool updateSucceeded,
             List<string> messages)
         {
-            Feature currentFeature = feature;
+            Feature current = feature;
 
-            while (currentFeature != null)
+            while (current != null)
             {
                 string typeName =
-                    SafeFeatureTypeName(currentFeature);
+                    SafeFeatureTypeName(current);
 
-                if (string.Equals(
-                        typeName,
-                        "SolidBodyFolder",
-                        StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(
-                        typeName,
-                        "CutListFolder",
-                        StringComparison.OrdinalIgnoreCase))
+                if (IsCutListContainer(typeName) ||
+                    IsCutListFolder(typeName))
                 {
                     TryInvokeUpdateCutList(
-                        currentFeature,
+                        current,
                         ref updateAttempted,
                         ref updateSucceeded,
                         messages);
                 }
 
-                Feature subFeature =
-                    currentFeature.GetFirstSubFeature()
-                        as Feature;
+                Feature child = null;
 
-                if (subFeature != null)
+                try
+                {
+                    child =
+                        current.GetFirstSubFeature()
+                            as Feature;
+                }
+                catch
+                {
+                    child = null;
+                }
+
+                if (child != null)
                 {
                     TryUpdateCutListFromFeatures(
-                        subFeature,
+                        child,
                         true,
                         ref updateAttempted,
                         ref updateSucceeded,
                         messages);
                 }
 
-                currentFeature =
+                current =
                     featureIsSubFeature
-                        ? currentFeature.GetNextSubFeature() as Feature
-                        : currentFeature.GetNextFeature() as Feature;
+                        ? current.GetNextSubFeature() as Feature
+                        : current.GetNextFeature() as Feature;
             }
         }
 
@@ -511,7 +1220,8 @@ namespace SolidDNA
                 if (result is bool)
                 {
                     updateSucceeded =
-                        updateSucceeded || (bool)result;
+                        updateSucceeded ||
+                        (bool)result;
                 }
                 else
                 {
@@ -520,19 +1230,26 @@ namespace SolidDNA
             }
             catch (MissingMethodException)
             {
-                // Some SOLIDWORKS interop versions do not expose UpdateCutList
-                // on every body-folder object. Rebuild still refreshes many
-                // cut-list states, so this is not fatal.
+                // Not every body-folder object exposes UpdateCutList.
+            }
+            catch (TargetInvocationException ex)
+            {
+                AddMessage(
+                    messages,
+                    "UpdateCutList failed for feature '" +
+                    SafeFeatureName(feature) +
+                    "': " +
+                    (ex.InnerException == null
+                        ? ex.Message
+                        : ex.InnerException.Message));
             }
             catch (Exception ex)
             {
-                if (messages != null)
-                {
-                    messages.Add(
-                        "UpdateCutList failed for feature '" +
-                        SafeFeatureName(feature) +
-                        "': " + ex.Message);
-                }
+                AddMessage(
+                    messages,
+                    "UpdateCutList failed for feature '" +
+                    SafeFeatureName(feature) +
+                    "': " + ex.Message);
             }
         }
 
@@ -543,295 +1260,6 @@ namespace SolidDNA
                 return string.Empty;
 
             return "(" + context.Trim() + ")";
-        }
-
-        private static void TraverseFeatures(
-            Feature feature,
-            List<CutListItemInfo> cutListItems,
-            int depth,
-            bool featureIsSubFeature)
-        {
-            Feature currentFeature = feature;
-
-            while (currentFeature != null)
-            {
-                string typeName =
-                    SafeFeatureTypeName(currentFeature);
-
-                if (string.Equals(
-                        typeName,
-                        "CutListFolder",
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    CutListItemInfo item =
-                        CreateCutListItemInfo(currentFeature);
-
-                    if (item != null)
-                    {
-                        item.FeatureDepth = depth;
-                        cutListItems.Add(item);
-                    }
-                }
-
-                Feature subFeature =
-                    currentFeature.GetFirstSubFeature()
-                        as Feature;
-
-                if (subFeature != null)
-                {
-                    TraverseFeatures(
-                        subFeature,
-                        cutListItems,
-                        depth + 1,
-                        true);
-                }
-
-                currentFeature =
-                    featureIsSubFeature
-                        ? currentFeature.GetNextSubFeature() as Feature
-                        : currentFeature.GetNextFeature() as Feature;
-            }
-        }
-
-        private static CutListItemInfo CreateCutListItemInfo(
-            Feature cutListFeature)
-        {
-            if (cutListFeature == null)
-                return null;
-
-            CustomPropertyManager propertyManager =
-                cutListFeature.CustomPropertyManager;
-
-            if (propertyManager == null)
-                return null;
-
-            CutListItemInfo item =
-                new CutListItemInfo();
-
-            item.Feature = cutListFeature;
-            item.PropertyManager = propertyManager;
-            item.FeatureName =
-                cutListFeature.Name ?? string.Empty;
-            item.FeatureTypeName =
-                SafeFeatureTypeName(cutListFeature);
-
-            item.ExistingDescription =
-                ReadPropertyText(
-                    propertyManager,
-                    DescriptionPropertyName,
-                    "Description");
-
-            item.ExistingBrand =
-                ReadPropertyText(
-                    propertyManager,
-                    BrandPropertyName,
-                    "Brand");
-
-            item.ExistingModel =
-                ReadPropertyText(
-                    propertyManager,
-                    ModelPropertyName,
-                    "Model");
-
-            BodyFolder bodyFolder = null;
-
-            try
-            {
-                bodyFolder =
-                    cutListFeature.GetSpecificFeature2()
-                        as BodyFolder;
-            }
-            catch
-            {
-                bodyFolder = null;
-            }
-
-            if (bodyFolder != null)
-            {
-                object[] bodies = null;
-
-                try
-                {
-                    bodies = bodyFolder.GetBodies()
-                        as object[];
-                }
-                catch
-                {
-                    bodies = null;
-                }
-
-                if (bodies != null)
-                {
-                    foreach (object bodyObject in bodies)
-                    {
-                        Body2 body =
-                            bodyObject as Body2;
-
-                        if (body == null)
-                            continue;
-
-                        string bodyName =
-                            string.Empty;
-
-                        try
-                        {
-                            bodyName =
-                                body.Name ?? string.Empty;
-                        }
-                        catch
-                        {
-                            bodyName = string.Empty;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(bodyName))
-                        {
-                            item.BodyNames.Add(bodyName);
-                        }
-                    }
-                }
-            }
-
-            return item;
-        }
-
-        private static List<KeyValuePair<string, string>> ParseExtraProperties(
-            string extraPropertiesText,
-            CutListGridRow row,
-            CutListWriteReport report)
-        {
-            List<KeyValuePair<string, string>> result =
-                new List<KeyValuePair<string, string>>();
-
-            if (string.IsNullOrWhiteSpace(extraPropertiesText))
-                return result;
-
-            string normalized =
-                extraPropertiesText
-                    .Replace("\r\n", ";")
-                    .Replace("\n", ";")
-                    .Replace("\r", ";");
-
-            string[] entries =
-                normalized.Split(
-                    new[] { ';' },
-                    StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (string entry in entries)
-            {
-                string trimmed =
-                    entry == null
-                        ? string.Empty
-                        : entry.Trim();
-
-                if (string.IsNullOrWhiteSpace(trimmed))
-                    continue;
-
-                int separatorIndex =
-                    trimmed.IndexOf('=');
-
-                if (separatorIndex <= 0)
-                {
-                    if (report != null)
-                    {
-                        report.GeneralMessages.Add(
-                            "Ignored extra property entry for " +
-                            (row == null ? "<unknown>" : row.FeatureName) +
-                            ": " + trimmed +
-                            " . Use PROPERTY=VALUE format.");
-                    }
-
-                    continue;
-                }
-
-                string propertyName =
-                    trimmed.Substring(0, separatorIndex).Trim();
-
-                string propertyValue =
-                    trimmed.Substring(separatorIndex + 1).Trim();
-
-                if (string.IsNullOrWhiteSpace(propertyName))
-                    continue;
-
-                result.Add(
-                    new KeyValuePair<string, string>(
-                        propertyName,
-                        propertyValue));
-            }
-
-            return result;
-        }
-
-        private static void SetCutListTextProperty(
-            CustomPropertyManager propertyManager,
-            string propertyName,
-            string value)
-        {
-            if (propertyManager == null ||
-                string.IsNullOrWhiteSpace(propertyName))
-            {
-                return;
-            }
-
-            propertyManager.Add3(
-                propertyName.Trim(),
-                (int)swCustomInfoType_e.swCustomInfoText,
-                value ?? string.Empty,
-                (int)swCustomPropertyAddOption_e
-                    .swCustomPropertyReplaceValue);
-        }
-
-        private static string ReadPropertyText(
-            CustomPropertyManager propertyManager,
-            params string[] possibleNames)
-        {
-            if (propertyManager == null ||
-                possibleNames == null)
-            {
-                return string.Empty;
-            }
-
-            foreach (string propertyName in possibleNames)
-            {
-                if (string.IsNullOrWhiteSpace(propertyName))
-                    continue;
-
-                string rawValue;
-                string resolvedValue;
-                bool wasResolved;
-                bool linked;
-
-                try
-                {
-                    int result =
-                        propertyManager.Get6(
-                            propertyName,
-                            false,
-                            out rawValue,
-                            out resolvedValue,
-                            out wasResolved,
-                            out linked);
-
-                    if (result ==
-                            (int)swCustomInfoGetResult_e
-                                .swCustomInfoGetResult_NotPresent)
-                    {
-                        continue;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(resolvedValue))
-                        return resolvedValue.Trim();
-
-                    if (!string.IsNullOrWhiteSpace(rawValue))
-                        return rawValue.Trim();
-                }
-                catch
-                {
-                    // Some legacy cut-list items can reject a property read.
-                    // Ignore and test the next accepted spelling.
-                }
-            }
-
-            return string.Empty;
         }
 
         private static string SafeFeatureName(
@@ -858,12 +1286,26 @@ namespace SolidDNA
 
             try
             {
-                return feature.GetTypeName2() ?? string.Empty;
+                return feature.GetTypeName2() ??
+                       string.Empty;
             }
             catch
             {
                 return string.Empty;
             }
+        }
+
+        private static void AddMessage(
+            List<string> messages,
+            string message)
+        {
+            if (messages == null ||
+                string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            messages.Add(message);
         }
 
         private static string WriteReport(
@@ -877,23 +1319,28 @@ namespace SolidDNA
                     "CabinTools",
                     "CutListReports");
 
-            Directory.CreateDirectory(reportFolder);
+            Directory.CreateDirectory(
+                reportFolder);
 
             string fileBaseName =
                 "CutListProfileManualUpdate_" +
-                DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                DateTime.Now.ToString(
+                    "yyyyMMdd_HHmmss");
 
             string documentTitle =
                 modelDoc == null
                     ? string.Empty
-                    : modelDoc.GetTitle() ?? string.Empty;
+                    : modelDoc.GetTitle() ??
+                      string.Empty;
 
-            if (!string.IsNullOrWhiteSpace(documentTitle))
+            if (!string.IsNullOrWhiteSpace(
+                    documentTitle))
             {
                 fileBaseName +=
                     "_" +
                     SanitizeFileName(
-                        Path.GetFileNameWithoutExtension(documentTitle));
+                        Path.GetFileNameWithoutExtension(
+                            documentTitle));
             }
 
             string reportPath =
@@ -919,89 +1366,87 @@ namespace SolidDNA
                 "Cabin Tools - Manual cut-list property update report");
             builder.AppendLine(
                 "Generated: " +
-                DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                DateTime.Now.ToString(
+                    "yyyy-MM-dd HH:mm:ss"));
             builder.AppendLine();
             builder.AppendLine(
                 "Document title: " +
-                (report.DocumentTitle ?? string.Empty));
+                (report.DocumentTitle ??
+                 string.Empty));
             builder.AppendLine(
                 "Document path: " +
-                (report.DocumentPath ?? string.Empty));
-            builder.AppendLine();
-            builder.AppendLine(
-                "Standard profile presets:");
-            builder.AppendLine(
-                "Top Profile: DESCRIPTION = Top Profile, BRAND = SBA, MODEL = Type 121");
-            builder.AppendLine(
-                "Bottom Profile: DESCRIPTION = Bottom Profile, BRAND = SBA, MODEL = Type 121");
+                (report.DocumentPath ??
+                 string.Empty));
             builder.AppendLine();
             builder.AppendLine(
                 "Summary:");
             builder.AppendLine(
-                "Updated rows: " + report.UpdatedRows.Count);
+                "Updated rows: " +
+                report.UpdatedRows.Count);
             builder.AppendLine(
-                "Skipped rows: " + report.SkippedRows.Count);
+                "Skipped rows: " +
+                report.SkippedRows.Count);
             builder.AppendLine(
-                "Failed rows: " + report.FailedRows.Count);
+                "Failed rows: " +
+                report.FailedRows.Count);
             builder.AppendLine();
 
             if (report.GeneralMessages.Count > 0)
             {
-                builder.AppendLine("General messages:");
+                builder.AppendLine(
+                    "General messages:");
 
-                foreach (string message in report.GeneralMessages)
+                foreach (string message
+                         in report.GeneralMessages)
                 {
-                    builder.AppendLine("- " + message);
+                    builder.AppendLine(
+                        "- " + message);
                 }
 
                 builder.AppendLine();
             }
 
-            builder.AppendLine("Updated rows:");
-
-            if (report.UpdatedRows.Count == 0)
-            {
-                builder.AppendLine("- None");
-            }
-            else
-            {
-                foreach (CutListGridRow row in report.UpdatedRows)
-                {
-                    AppendRowReport(builder, row);
-                }
-            }
+            AppendReportSection(
+                builder,
+                "Updated rows:",
+                report.UpdatedRows);
 
             builder.AppendLine();
-            builder.AppendLine("Skipped rows:");
 
-            if (report.SkippedRows.Count == 0)
-            {
-                builder.AppendLine("- None");
-            }
-            else
-            {
-                foreach (CutListGridRow row in report.SkippedRows)
-                {
-                    AppendRowReport(builder, row);
-                }
-            }
+            AppendReportSection(
+                builder,
+                "Skipped rows:",
+                report.SkippedRows);
 
             builder.AppendLine();
-            builder.AppendLine("Failed rows:");
 
-            if (report.FailedRows.Count == 0)
-            {
-                builder.AppendLine("- None");
-            }
-            else
-            {
-                foreach (CutListGridRow row in report.FailedRows)
-                {
-                    AppendRowReport(builder, row);
-                }
-            }
+            AppendReportSection(
+                builder,
+                "Failed rows:",
+                report.FailedRows);
 
             return builder.ToString();
+        }
+
+        private static void AppendReportSection(
+            StringBuilder builder,
+            string heading,
+            IList<CutListGridRow> rows)
+        {
+            builder.AppendLine(heading);
+
+            if (rows == null || rows.Count == 0)
+            {
+                builder.AppendLine("- None");
+                return;
+            }
+
+            foreach (CutListGridRow row in rows)
+            {
+                AppendRowReport(
+                    builder,
+                    row);
+            }
         }
 
         private static void AppendRowReport(
@@ -1009,21 +1454,28 @@ namespace SolidDNA
             CutListGridRow row)
         {
             builder.AppendLine(
-                "- " + DisplayValue(row.FeatureName));
+                "- " +
+                DisplayValue(row.FeatureName));
             builder.AppendLine(
                 "  Apply: " + row.Apply);
             builder.AppendLine(
-                "  Profile type: " + DisplayValue(row.ProfileType));
+                "  Profile type: " +
+                DisplayValue(row.ProfileType));
             builder.AppendLine(
-                "  Description: " + DisplayValue(row.Description));
+                "  DESCRIPTION: " +
+                DisplayValue(row.Description));
             builder.AppendLine(
-                "  Brand: " + DisplayValue(row.Brand));
+                "  BRAND: " +
+                DisplayValue(row.Brand));
             builder.AppendLine(
-                "  Model: " + DisplayValue(row.Model));
+                "  MODEL: " +
+                DisplayValue(row.Model));
             builder.AppendLine(
-                "  Extra properties: " + DisplayValue(row.ExtraProperties));
+                "  Extra properties: " +
+                DisplayValue(row.ExtraProperties));
             builder.AppendLine(
-                "  Status: " + DisplayValue(row.Status));
+                "  Status: " +
+                DisplayValue(row.Status));
         }
 
         private static string DisplayValue(
@@ -1042,8 +1494,8 @@ namespace SolidDNA
 
             string sanitized = value;
 
-            foreach (char invalidCharacter in
-                Path.GetInvalidFileNameChars())
+            foreach (char invalidCharacter
+                     in Path.GetInvalidFileNameChars())
             {
                 sanitized =
                     sanitized.Replace(
@@ -1082,12 +1534,17 @@ namespace SolidDNA
         {
             public Feature Feature;
             public CustomPropertyManager PropertyManager;
-            public string FeatureName = string.Empty;
-            public string FeatureTypeName = string.Empty;
+            public string FeatureName =
+                string.Empty;
+            public string FeatureTypeName =
+                string.Empty;
             public int FeatureDepth;
-            public string ExistingDescription = string.Empty;
-            public string ExistingBrand = string.Empty;
-            public string ExistingModel = string.Empty;
+            public string ExistingDescription =
+                string.Empty;
+            public string ExistingBrand =
+                string.Empty;
+            public string ExistingModel =
+                string.Empty;
             public List<string> BodyNames =
                 new List<string>();
         }
@@ -1096,16 +1553,26 @@ namespace SolidDNA
         {
             public bool Apply;
             public CutListItemInfo Item;
-            public string FeatureName = string.Empty;
-            public string ExistingDescription = string.Empty;
-            public string ExistingBrand = string.Empty;
-            public string ExistingModel = string.Empty;
-            public string ProfileType = SkipProfileName;
-            public string Description = string.Empty;
-            public string Brand = string.Empty;
-            public string Model = string.Empty;
-            public string ExtraProperties = string.Empty;
-            public string Status = string.Empty;
+            public string FeatureName =
+                string.Empty;
+            public string ExistingDescription =
+                string.Empty;
+            public string ExistingBrand =
+                string.Empty;
+            public string ExistingModel =
+                string.Empty;
+            public string ProfileType =
+                SkipProfileName;
+            public string Description =
+                string.Empty;
+            public string Brand =
+                string.Empty;
+            public string Model =
+                string.Empty;
+            public string ExtraProperties =
+                string.Empty;
+            public string Status =
+                string.Empty;
 
             public CutListGridRow CloneForReport()
             {
@@ -1114,14 +1581,18 @@ namespace SolidDNA
                     Apply = Apply,
                     Item = null,
                     FeatureName = FeatureName,
-                    ExistingDescription = ExistingDescription,
-                    ExistingBrand = ExistingBrand,
-                    ExistingModel = ExistingModel,
+                    ExistingDescription =
+                        ExistingDescription,
+                    ExistingBrand =
+                        ExistingBrand,
+                    ExistingModel =
+                        ExistingModel,
                     ProfileType = ProfileType,
                     Description = Description,
                     Brand = Brand,
                     Model = Model,
-                    ExtraProperties = ExtraProperties,
+                    ExtraProperties =
+                        ExtraProperties,
                     Status = Status
                 };
             }
@@ -1129,25 +1600,37 @@ namespace SolidDNA
 
         internal sealed class CutListWriteReport
         {
-            public string DocumentTitle = string.Empty;
-            public string DocumentPath = string.Empty;
-            public string ReportPath = string.Empty;
+            public string DocumentTitle =
+                string.Empty;
+            public string DocumentPath =
+                string.Empty;
+            public string ReportPath =
+                string.Empty;
+
             public List<string> GeneralMessages =
                 new List<string>();
+
             public List<CutListGridRow> UpdatedRows =
                 new List<CutListGridRow>();
+
             public List<CutListGridRow> SkippedRows =
                 new List<CutListGridRow>();
+
             public List<CutListGridRow> FailedRows =
                 new List<CutListGridRow>();
         }
     }
 
-    internal sealed class CutListProfilePropertyForm : Form
+    internal sealed class CutListProfilePropertyForm :
+        Form
     {
         private readonly IModelDoc2 modelDoc;
-        private readonly List<CutListProfilePropertyCommand.CutListGridRow>
-            rows = new List<CutListProfilePropertyCommand.CutListGridRow>();
+
+        private readonly List<
+            CutListProfilePropertyCommand.CutListGridRow>
+            rows =
+                new List<
+                    CutListProfilePropertyCommand.CutListGridRow>();
 
         private DataGridView grid;
         private ComboBox presetComboBox;
@@ -1157,10 +1640,6 @@ namespace SolidDNA
         private TextBox customPropertyNameTextBox;
         private TextBox customPropertyValueTextBox;
         private Label statusLabel;
-        private Button applyCheckedButton;
-        private Button applyAllButton;
-        private Button closeButton;
-        private bool suppressGridEvents;
 
         private const int ColumnApply = 0;
         private const int ColumnFeatureName = 1;
@@ -1176,224 +1655,473 @@ namespace SolidDNA
             IModelDoc2 activeModelDoc)
         {
             modelDoc = activeModelDoc;
+
             InitializeComponent();
             RefreshCutListRows();
         }
 
         private void InitializeComponent()
         {
-            Text = "Cabin Tools - Cut List Profile Properties";
-            StartPosition = FormStartPosition.CenterScreen;
+            Text =
+                "Cabin Tools - Cut List Profile Properties";
+
+            StartPosition =
+                FormStartPosition.CenterScreen;
+
             Width = 1300;
             Height = 760;
-            MinimumSize = new Size(1050, 600);
+
+            MinimumSize =
+                new Size(1050, 600);
 
             TableLayoutPanel mainLayout =
                 new TableLayoutPanel();
-            mainLayout.Dock = DockStyle.Fill;
+
+            mainLayout.Dock =
+                DockStyle.Fill;
             mainLayout.ColumnCount = 1;
             mainLayout.RowCount = 5;
+
             mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.AutoSize));
+                new RowStyle(
+                    SizeType.AutoSize));
+
             mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.AutoSize));
+                new RowStyle(
+                    SizeType.AutoSize));
+
             mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.Percent, 100F));
+                new RowStyle(
+                    SizeType.Percent,
+                    100F));
+
             mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.AutoSize));
+                new RowStyle(
+                    SizeType.AutoSize));
+
             mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.AutoSize));
+                new RowStyle(
+                    SizeType.AutoSize));
+
             Controls.Add(mainLayout);
 
-            Label headerLabel = new Label();
-            headerLabel.Dock = DockStyle.Fill;
+            Label headerLabel =
+                new Label();
+
+            headerLabel.Dock =
+                DockStyle.Fill;
             headerLabel.AutoSize = true;
-            headerLabel.Padding = new Padding(10, 10, 10, 4);
+            headerLabel.Padding =
+                new Padding(10, 10, 10, 4);
+
             headerLabel.Text =
-                "Select Top Profile or Bottom Profile manually for each cut-list item. " +
-                "No automatic detection, naming convention, or role property is used.";
-            mainLayout.Controls.Add(headerLabel, 0, 0);
+                "Select Top Profile, Bottom Profile, Custom, or Skip for each active cut-list item. " +
+                "Only body-containing folders displayed in the active cut list are loaded.";
 
             mainLayout.Controls.Add(
-                CreatePresetPanel(),
+                headerLabel,
+                0,
+                0);
+
+            mainLayout.Controls.Add(
+                CreateEditorPanel(),
                 0,
                 1);
 
-            grid = new DataGridView();
-            grid.Dock = DockStyle.Fill;
-            grid.AllowUserToAddRows = false;
-            grid.AllowUserToDeleteRows = false;
-            grid.AutoGenerateColumns = false;
-            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            grid.MultiSelect = true;
-            grid.RowHeadersVisible = false;
-            grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+            grid =
+                new DataGridView();
+
+            grid.Dock =
+                DockStyle.Fill;
+            grid.AllowUserToAddRows =
+                false;
+            grid.AllowUserToDeleteRows =
+                false;
+            grid.AutoGenerateColumns =
+                false;
+            grid.SelectionMode =
+                DataGridViewSelectionMode
+                    .FullRowSelect;
+            grid.MultiSelect =
+                true;
+            grid.RowHeadersVisible =
+                false;
+            grid.AutoSizeRowsMode =
+                DataGridViewAutoSizeRowsMode
+                    .None;
+
             grid.ColumnHeadersHeightSizeMode =
-                DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            grid.CellValueChanged += Grid_CellValueChanged;
+                DataGridViewColumnHeadersHeightSizeMode
+                    .AutoSize;
+
+            grid.CellValueChanged +=
+                Grid_CellValueChanged;
+
             grid.CurrentCellDirtyStateChanged +=
                 Grid_CurrentCellDirtyStateChanged;
-            grid.DataError += Grid_DataError;
+
+            grid.DataError +=
+                Grid_DataError;
 
             CreateGridColumns();
 
-            mainLayout.Controls.Add(grid, 0, 2);
+            mainLayout.Controls.Add(
+                grid,
+                0,
+                2);
 
-            statusLabel = new Label();
-            statusLabel.Dock = DockStyle.Fill;
-            statusLabel.AutoSize = true;
-            statusLabel.Padding = new Padding(10, 6, 10, 6);
-            statusLabel.Text = "Ready.";
-            mainLayout.Controls.Add(statusLabel, 0, 3);
+            statusLabel =
+                new Label();
 
-            FlowLayoutPanel bottomPanel =
-                new FlowLayoutPanel();
-            bottomPanel.Dock = DockStyle.Fill;
-            bottomPanel.FlowDirection = FlowDirection.RightToLeft;
-            bottomPanel.AutoSize = true;
-            bottomPanel.Padding = new Padding(10);
+            statusLabel.Dock =
+                DockStyle.Fill;
+            statusLabel.AutoSize =
+                true;
+            statusLabel.Padding =
+                new Padding(10, 6, 10, 6);
+            statusLabel.Text =
+                "Ready.";
 
-            closeButton = new Button();
-            closeButton.Text = "Close";
-            closeButton.AutoSize = true;
-            closeButton.Click += CloseButton_Click;
-            bottomPanel.Controls.Add(closeButton);
+            mainLayout.Controls.Add(
+                statusLabel,
+                0,
+                3);
 
-            applyCheckedButton = new Button();
-            applyCheckedButton.Text = "Apply checked rows";
-            applyCheckedButton.AutoSize = true;
-            applyCheckedButton.Click += ApplyCheckedButton_Click;
-            bottomPanel.Controls.Add(applyCheckedButton);
+            mainLayout.Controls.Add(
+                CreateBottomPanel(),
+                0,
+                4);
+        }
 
-            applyAllButton = new Button();
-            applyAllButton.Text = "Apply all rows";
-            applyAllButton.AutoSize = true;
-            applyAllButton.Click += ApplyAllButton_Click;
-            bottomPanel.Controls.Add(applyAllButton);
+        private Control CreateEditorPanel()
+        {
+            TableLayoutPanel editorPanel =
+                new TableLayoutPanel();
 
-            Button selectAllButton = new Button();
-            selectAllButton.Text = "Check all";
-            selectAllButton.AutoSize = true;
-            selectAllButton.Click += SelectAllButton_Click;
-            bottomPanel.Controls.Add(selectAllButton);
+            editorPanel.Dock =
+                DockStyle.Fill;
+            editorPanel.AutoSize =
+                true;
+            editorPanel.ColumnCount =
+                1;
+            editorPanel.RowCount =
+                2;
+            editorPanel.Padding =
+                new Padding(10, 0, 10, 4);
 
-            Button clearAllButton = new Button();
-            clearAllButton.Text = "Uncheck all";
-            clearAllButton.AutoSize = true;
-            clearAllButton.Click += ClearAllButton_Click;
-            bottomPanel.Controls.Add(clearAllButton);
+            editorPanel.Controls.Add(
+                CreatePresetPanel(),
+                0,
+                0);
 
-            Button refreshButton = new Button();
-            refreshButton.Text = "Refresh cut-list items";
-            refreshButton.AutoSize = true;
-            refreshButton.Click += RefreshButton_Click;
-            bottomPanel.Controls.Add(refreshButton);
+            editorPanel.Controls.Add(
+                CreateCustomPropertyPanel(),
+                0,
+                1);
 
-            mainLayout.Controls.Add(bottomPanel, 0, 4);
+            return editorPanel;
         }
 
         private Control CreatePresetPanel()
         {
-            TableLayoutPanel panel = new TableLayoutPanel();
-            panel.Dock = DockStyle.Top;
-            panel.AutoSize = true;
-            panel.Padding = new Padding(10, 4, 10, 8);
-            panel.ColumnCount = 1;
-            panel.RowCount = 3;
-            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            FlowLayoutPanel panel =
+                new FlowLayoutPanel();
 
-            FlowLayoutPanel profilePanel = new FlowLayoutPanel();
-            profilePanel.Dock = DockStyle.Fill;
-            profilePanel.AutoSize = true;
-            profilePanel.WrapContents = true;
+            panel.Dock =
+                DockStyle.Fill;
+            panel.AutoSize =
+                true;
+            panel.WrapContents =
+                true;
 
-            profilePanel.Controls.Add(
+            panel.Controls.Add(
                 CreateLabel("Profile preset:"));
 
-            presetComboBox = new ComboBox();
-            presetComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            presetComboBox.Width = 150;
-            presetComboBox.Items.Add(
-                CutListProfilePropertyCommand.TopProfileName);
-            presetComboBox.Items.Add(
-                CutListProfilePropertyCommand.BottomProfileName);
-            presetComboBox.Items.Add(
-                CutListProfilePropertyCommand.CustomProfileName);
-            presetComboBox.SelectedIndex = 0;
+            presetComboBox =
+                new ComboBox();
+
+            presetComboBox.DropDownStyle =
+                ComboBoxStyle.DropDownList;
+            presetComboBox.Width =
+                150;
+
+            presetComboBox.Items.AddRange(
+                new object[]
+                {
+                    CutListProfilePropertyCommand
+                        .TopProfileName,
+                    CutListProfilePropertyCommand
+                        .BottomProfileName,
+                    CutListProfilePropertyCommand
+                        .CustomProfileName,
+                    CutListProfilePropertyCommand
+                        .SkipProfileName
+                });
+
+            presetComboBox.SelectedItem =
+                CutListProfilePropertyCommand
+                    .BottomProfileName;
+
             presetComboBox.SelectedIndexChanged +=
                 PresetComboBox_SelectedIndexChanged;
-            profilePanel.Controls.Add(presetComboBox);
 
-            presetDescriptionTextBox = CreateTextBox(160);
-            presetBrandTextBox = CreateTextBox(90);
-            presetModelTextBox = CreateTextBox(110);
-            ApplyPresetToTextBoxes();
+            panel.Controls.Add(
+                presetComboBox);
 
-            profilePanel.Controls.Add(CreateLabel("DESCRIPTION:"));
-            profilePanel.Controls.Add(presetDescriptionTextBox);
-            profilePanel.Controls.Add(CreateLabel("BRAND:"));
-            profilePanel.Controls.Add(presetBrandTextBox);
-            profilePanel.Controls.Add(CreateLabel("MODEL:"));
-            profilePanel.Controls.Add(presetModelTextBox);
+            panel.Controls.Add(
+                CreateLabel("DESCRIPTION:"));
 
-            Button applyPresetCheckedButton = new Button();
-            applyPresetCheckedButton.Text = "Apply preset to checked";
-            applyPresetCheckedButton.AutoSize = true;
+            presetDescriptionTextBox =
+                new TextBox();
+
+            presetDescriptionTextBox.Width =
+                150;
+
+            panel.Controls.Add(
+                presetDescriptionTextBox);
+
+            panel.Controls.Add(
+                CreateLabel("BRAND:"));
+
+            presetBrandTextBox =
+                new TextBox();
+
+            presetBrandTextBox.Width =
+                100;
+
+            panel.Controls.Add(
+                presetBrandTextBox);
+
+            panel.Controls.Add(
+                CreateLabel("MODEL:"));
+
+            presetModelTextBox =
+                new TextBox();
+
+            presetModelTextBox.Width =
+                120;
+
+            panel.Controls.Add(
+                presetModelTextBox);
+
+            Button applyPresetCheckedButton =
+                new Button();
+
+            applyPresetCheckedButton.AutoSize =
+                true;
+            applyPresetCheckedButton.Text =
+                "Apply preset to checked";
+
             applyPresetCheckedButton.Click +=
                 ApplyPresetCheckedButton_Click;
-            profilePanel.Controls.Add(applyPresetCheckedButton);
 
-            Button applyPresetAllButton = new Button();
-            applyPresetAllButton.Text = "Apply preset to all";
-            applyPresetAllButton.AutoSize = true;
+            panel.Controls.Add(
+                applyPresetCheckedButton);
+
+            Button applyPresetAllButton =
+                new Button();
+
+            applyPresetAllButton.AutoSize =
+                true;
+            applyPresetAllButton.Text =
+                "Apply preset to all";
+
             applyPresetAllButton.Click +=
                 ApplyPresetAllButton_Click;
-            profilePanel.Controls.Add(applyPresetAllButton);
 
-            panel.Controls.Add(profilePanel, 0, 0);
+            panel.Controls.Add(
+                applyPresetAllButton);
 
-            FlowLayoutPanel customPanel = new FlowLayoutPanel();
-            customPanel.Dock = DockStyle.Fill;
-            customPanel.AutoSize = true;
-            customPanel.WrapContents = true;
-            customPanel.Padding = new Padding(0, 4, 0, 0);
+            ApplyPresetToTextBoxes();
 
-            customPanel.Controls.Add(
-                CreateLabel("Custom cut-list property:"));
+            return panel;
+        }
 
-            customPropertyNameTextBox = CreateTextBox(170);
-            customPropertyNameTextBox.Text = "";
-            customPanel.Controls.Add(customPropertyNameTextBox);
+        private Control CreateCustomPropertyPanel()
+        {
+            FlowLayoutPanel panel =
+                new FlowLayoutPanel();
 
-            customPanel.Controls.Add(CreateLabel("="));
+            panel.Dock =
+                DockStyle.Fill;
+            panel.AutoSize =
+                true;
+            panel.WrapContents =
+                true;
 
-            customPropertyValueTextBox = CreateTextBox(220);
-            customPanel.Controls.Add(customPropertyValueTextBox);
+            panel.Controls.Add(
+                CreateLabel(
+                    "Custom cut-list property:"));
 
-            Button addCustomCheckedButton = new Button();
-            addCustomCheckedButton.Text = "Add/update property to checked";
-            addCustomCheckedButton.AutoSize = true;
+            customPropertyNameTextBox =
+                new TextBox();
+
+            customPropertyNameTextBox.Width =
+                180;
+
+            panel.Controls.Add(
+                customPropertyNameTextBox);
+
+            panel.Controls.Add(
+                CreateLabel("="));
+
+            customPropertyValueTextBox =
+                new TextBox();
+
+            customPropertyValueTextBox.Width =
+                180;
+
+            panel.Controls.Add(
+                customPropertyValueTextBox);
+
+            Button addCustomCheckedButton =
+                new Button();
+
+            addCustomCheckedButton.AutoSize =
+                true;
+            addCustomCheckedButton.Text =
+                "Add/update property to checked";
+
             addCustomCheckedButton.Click +=
                 AddCustomCheckedButton_Click;
-            customPanel.Controls.Add(addCustomCheckedButton);
 
-            Button addCustomAllButton = new Button();
-            addCustomAllButton.Text = "Add/update property to all";
-            addCustomAllButton.AutoSize = true;
+            panel.Controls.Add(
+                addCustomCheckedButton);
+
+            Button addCustomAllButton =
+                new Button();
+
+            addCustomAllButton.AutoSize =
+                true;
+            addCustomAllButton.Text =
+                "Add/update property to all";
+
             addCustomAllButton.Click +=
                 AddCustomAllButton_Click;
-            customPanel.Controls.Add(addCustomAllButton);
 
-            panel.Controls.Add(customPanel, 0, 1);
+            panel.Controls.Add(
+                addCustomAllButton);
 
-            Label noteLabel = new Label();
-            noteLabel.AutoSize = true;
-            noteLabel.Padding = new Padding(0, 4, 0, 0);
-            noteLabel.Text =
-                "Extra properties can also be edited per row using: PROPERTY=VALUE; PROPERTY2=VALUE2";
-            panel.Controls.Add(noteLabel, 0, 2);
+            Label extraHelp =
+                CreateLabel(
+                    "Extra properties per row: PROPERTY=VALUE; PROPERTY2=VALUE2");
+
+            extraHelp.AutoSize =
+                true;
+
+            panel.Controls.Add(
+                extraHelp);
+
+            return panel;
+        }
+
+        private static Label CreateLabel(
+            string text)
+        {
+            Label label =
+                new Label();
+
+            label.AutoSize =
+                true;
+            label.Text =
+                text;
+            label.Margin =
+                new Padding(3, 7, 3, 0);
+
+            return label;
+        }
+
+        private Control CreateBottomPanel()
+        {
+            FlowLayoutPanel panel =
+                new FlowLayoutPanel();
+
+            panel.Dock =
+                DockStyle.Fill;
+            panel.FlowDirection =
+                FlowDirection.RightToLeft;
+            panel.AutoSize =
+                true;
+            panel.Padding =
+                new Padding(10);
+
+            Button closeButton =
+                new Button();
+
+            closeButton.Text =
+                "Close";
+            closeButton.AutoSize =
+                true;
+            closeButton.Click +=
+                CloseButton_Click;
+
+            panel.Controls.Add(
+                closeButton);
+
+            Button applyCheckedButton =
+                new Button();
+
+            applyCheckedButton.Text =
+                "Apply checked rows";
+            applyCheckedButton.AutoSize =
+                true;
+            applyCheckedButton.Click +=
+                ApplyCheckedButton_Click;
+
+            panel.Controls.Add(
+                applyCheckedButton);
+
+            Button applyAllButton =
+                new Button();
+
+            applyAllButton.Text =
+                "Apply all rows";
+            applyAllButton.AutoSize =
+                true;
+            applyAllButton.Click +=
+                ApplyAllButton_Click;
+
+            panel.Controls.Add(
+                applyAllButton);
+
+            Button checkAllButton =
+                new Button();
+
+            checkAllButton.Text =
+                "Check all";
+            checkAllButton.AutoSize =
+                true;
+            checkAllButton.Click +=
+                CheckAllButton_Click;
+
+            panel.Controls.Add(
+                checkAllButton);
+
+            Button uncheckAllButton =
+                new Button();
+
+            uncheckAllButton.Text =
+                "Uncheck all";
+            uncheckAllButton.AutoSize =
+                true;
+            uncheckAllButton.Click +=
+                UncheckAllButton_Click;
+
+            panel.Controls.Add(
+                uncheckAllButton);
+
+            Button refreshButton =
+                new Button();
+
+            refreshButton.Text =
+                "Refresh cut-list items";
+            refreshButton.AutoSize =
+                true;
+            refreshButton.Click +=
+                RefreshButton_Click;
+
+            panel.Controls.Add(
+                refreshButton);
 
             return panel;
         }
@@ -1402,189 +2130,284 @@ namespace SolidDNA
         {
             DataGridViewCheckBoxColumn applyColumn =
                 new DataGridViewCheckBoxColumn();
-            applyColumn.HeaderText = "Apply";
-            applyColumn.Width = 55;
-            grid.Columns.Add(applyColumn);
 
-            DataGridViewTextBoxColumn featureColumn =
+            applyColumn.HeaderText =
+                "Apply";
+            applyColumn.Width =
+                45;
+
+            grid.Columns.Add(
+                applyColumn);
+
+            DataGridViewTextBoxColumn nameColumn =
                 new DataGridViewTextBoxColumn();
-            featureColumn.HeaderText = "Cut-list item";
-            featureColumn.ReadOnly = true;
-            featureColumn.Width = 210;
-            grid.Columns.Add(featureColumn);
+
+            nameColumn.HeaderText =
+                "Cut-list item";
+            nameColumn.Width =
+                180;
+            nameColumn.ReadOnly =
+                true;
+
+            grid.Columns.Add(
+                nameColumn);
 
             DataGridViewComboBoxColumn profileColumn =
                 new DataGridViewComboBoxColumn();
-            profileColumn.HeaderText = "Profile type";
-            profileColumn.Width = 130;
-            profileColumn.Items.Add(
-                CutListProfilePropertyCommand.SkipProfileName);
-            profileColumn.Items.Add(
-                CutListProfilePropertyCommand.TopProfileName);
-            profileColumn.Items.Add(
-                CutListProfilePropertyCommand.BottomProfileName);
-            profileColumn.Items.Add(
-                CutListProfilePropertyCommand.CustomProfileName);
-            grid.Columns.Add(profileColumn);
+
+            profileColumn.HeaderText =
+                "Profile type";
+            profileColumn.Width =
+                130;
+            profileColumn.FlatStyle =
+                FlatStyle.Flat;
+
+            profileColumn.Items.AddRange(
+                new object[]
+                {
+                    CutListProfilePropertyCommand
+                        .TopProfileName,
+                    CutListProfilePropertyCommand
+                        .BottomProfileName,
+                    CutListProfilePropertyCommand
+                        .CustomProfileName,
+                    CutListProfilePropertyCommand
+                        .SkipProfileName
+                });
+
+            grid.Columns.Add(
+                profileColumn);
 
             DataGridViewTextBoxColumn descriptionColumn =
                 new DataGridViewTextBoxColumn();
-            descriptionColumn.HeaderText = "Description";
-            descriptionColumn.Width = 150;
-            grid.Columns.Add(descriptionColumn);
+
+            descriptionColumn.HeaderText =
+                "Description";
+            descriptionColumn.Width =
+                150;
+
+            grid.Columns.Add(
+                descriptionColumn);
 
             DataGridViewTextBoxColumn brandColumn =
                 new DataGridViewTextBoxColumn();
-            brandColumn.HeaderText = "Brand";
-            brandColumn.Width = 90;
-            grid.Columns.Add(brandColumn);
+
+            brandColumn.HeaderText =
+                "Brand";
+            brandColumn.Width =
+                90;
+
+            grid.Columns.Add(
+                brandColumn);
 
             DataGridViewTextBoxColumn modelColumn =
                 new DataGridViewTextBoxColumn();
-            modelColumn.HeaderText = "Model";
-            modelColumn.Width = 110;
-            grid.Columns.Add(modelColumn);
+
+            modelColumn.HeaderText =
+                "Model";
+            modelColumn.Width =
+                110;
+
+            grid.Columns.Add(
+                modelColumn);
 
             DataGridViewTextBoxColumn extraColumn =
                 new DataGridViewTextBoxColumn();
-            extraColumn.HeaderText = "Extra properties";
-            extraColumn.Width = 260;
-            grid.Columns.Add(extraColumn);
+
+            extraColumn.HeaderText =
+                "Extra properties";
+            extraColumn.Width =
+                250;
+
+            grid.Columns.Add(
+                extraColumn);
 
             DataGridViewTextBoxColumn existingColumn =
                 new DataGridViewTextBoxColumn();
-            existingColumn.HeaderText = "Existing values";
-            existingColumn.ReadOnly = true;
-            existingColumn.Width = 260;
-            grid.Columns.Add(existingColumn);
+
+            existingColumn.HeaderText =
+                "Existing values";
+            existingColumn.Width =
+                300;
+            existingColumn.ReadOnly =
+                true;
+
+            grid.Columns.Add(
+                existingColumn);
 
             DataGridViewTextBoxColumn statusColumn =
                 new DataGridViewTextBoxColumn();
-            statusColumn.HeaderText = "Status";
-            statusColumn.ReadOnly = true;
-            statusColumn.Width = 180;
-            grid.Columns.Add(statusColumn);
-        }
 
-        private static Label CreateLabel(string text)
-        {
-            Label label = new Label();
-            label.Text = text;
-            label.AutoSize = true;
-            label.TextAlign = ContentAlignment.MiddleLeft;
-            label.Margin = new Padding(6, 6, 2, 2);
-            return label;
-        }
+            statusColumn.HeaderText =
+                "Status";
+            statusColumn.Width =
+                150;
+            statusColumn.ReadOnly =
+                true;
 
-        private static TextBox CreateTextBox(int width)
-        {
-            TextBox textBox = new TextBox();
-            textBox.Width = width;
-            textBox.Margin = new Padding(2, 3, 8, 2);
-            return textBox;
+            grid.Columns.Add(
+                statusColumn);
         }
 
         private void RefreshCutListRows()
         {
-            rows.Clear();
-            grid.Rows.Clear();
-
-            List<string> messages = new List<string>();
-            List<CutListProfilePropertyCommand.CutListItemInfo> items =
-                CutListProfilePropertyCommand.GetCutListItems(
-                    modelDoc,
-                    messages);
-
-            foreach (CutListProfilePropertyCommand.CutListItemInfo item in items)
+            try
             {
-                CutListProfilePropertyCommand.CutListGridRow row =
-                    new CutListProfilePropertyCommand.CutListGridRow();
+                ReadAllGridRowsToModels();
 
-                row.Apply = false;
-                row.Item = item;
-                row.FeatureName = item.FeatureName;
-                row.ExistingDescription = item.ExistingDescription;
-                row.ExistingBrand = item.ExistingBrand;
-                row.ExistingModel = item.ExistingModel;
-                row.ProfileType =
-                    CutListProfilePropertyCommand.SkipProfileName;
-                row.Description = item.ExistingDescription;
-                row.Brand = item.ExistingBrand;
-                row.Model = item.ExistingModel;
-                row.Status = "Ready";
+                rows.Clear();
+                grid.Rows.Clear();
 
-                rows.Add(row);
-                AddGridRow(row);
+                List<string> messages =
+                    new List<string>();
+
+                List<
+                    CutListProfilePropertyCommand
+                        .CutListItemInfo>
+                    items =
+                        CutListProfilePropertyCommand
+                            .GetCutListItems(
+                                modelDoc,
+                                messages);
+
+                foreach (
+                    CutListProfilePropertyCommand
+                        .CutListItemInfo item
+                    in items)
+                {
+                    CutListProfilePropertyCommand
+                        .CutListGridRow row =
+                            new CutListProfilePropertyCommand
+                                .CutListGridRow();
+
+                    row.Apply =
+                        false;
+                    row.Item =
+                        item;
+                    row.FeatureName =
+                        item.FeatureName;
+                    row.ExistingDescription =
+                        item.ExistingDescription;
+                    row.ExistingBrand =
+                        item.ExistingBrand;
+                    row.ExistingModel =
+                        item.ExistingModel;
+                    row.ProfileType =
+                        CutListProfilePropertyCommand
+                            .SkipProfileName;
+                    row.Description =
+                        item.ExistingDescription;
+                    row.Brand =
+                        item.ExistingBrand;
+                    row.Model =
+                        item.ExistingModel;
+                    row.Status =
+                        "Ready";
+
+                    rows.Add(row);
+
+                    int rowIndex =
+                        grid.Rows.Add();
+
+                    DataGridViewRow gridRow =
+                        grid.Rows[rowIndex];
+
+                    gridRow.Tag =
+                        row;
+
+                    WriteGridRowFromModel(
+                        gridRow,
+                        row);
+                }
+
+                statusLabel.Text =
+                    "Loaded " +
+                    rows.Count +
+                    " active cut-list item(s).";
+
+                if (messages.Count > 0)
+                {
+                    statusLabel.Text +=
+                        " " +
+                        string.Join(
+                            " ",
+                            messages.ToArray());
+                }
             }
-
-            AutoSizeStatusCells();
-
-            if (items.Count == 0)
+            catch (Exception ex)
             {
                 statusLabel.Text =
-                    "No cut-list items were found. Confirm this is a weldment or multibody part and update the cut list.";
-                return;
+                    "Failed to load cut-list items: " +
+                    ex.Message;
+
+                MessageBox.Show(
+                    "Cabin Tools could not load the cut-list items.\r\n\r\n" +
+                    ex.Message,
+                    "Cabin Tools - Cut List Properties",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
-
-            if (messages.Count > 0)
-            {
-                statusLabel.Text =
-                    "Loaded " + items.Count +
-                    " cut-list item(s). Messages: " +
-                    string.Join(" | ", messages.ToArray());
-                return;
-            }
-
-            statusLabel.Text =
-                "Loaded " + items.Count +
-                " cut-list item(s). Select Top Profile or Bottom Profile manually, then apply checked rows.";
-        }
-
-        private void AddGridRow(
-            CutListProfilePropertyCommand.CutListGridRow row)
-        {
-            int index = grid.Rows.Add();
-            DataGridViewRow gridRow = grid.Rows[index];
-            gridRow.Tag = row;
-
-            WriteGridRowFromModel(gridRow, row);
         }
 
         private void WriteGridRowFromModel(
             DataGridViewRow gridRow,
-            CutListProfilePropertyCommand.CutListGridRow row)
+            CutListProfilePropertyCommand
+                .CutListGridRow row)
         {
-            bool previousSuppressGridEvents = suppressGridEvents;
-            suppressGridEvents = true;
-
-            try
+            if (gridRow == null ||
+                row == null)
             {
-                gridRow.Cells[ColumnApply].Value = row.Apply;
-                gridRow.Cells[ColumnFeatureName].Value = row.FeatureName;
-                gridRow.Cells[ColumnProfileType].Value = row.ProfileType;
-                gridRow.Cells[ColumnDescription].Value = row.Description;
-                gridRow.Cells[ColumnBrand].Value = row.Brand;
-                gridRow.Cells[ColumnModel].Value = row.Model;
-                gridRow.Cells[ColumnExtraProperties].Value = row.ExtraProperties;
-                gridRow.Cells[ColumnExisting].Value =
-                    "Description=" + Display(row.ExistingDescription) +
-                    "; Brand=" + Display(row.ExistingBrand) +
-                    "; Model=" + Display(row.ExistingModel);
-                gridRow.Cells[ColumnStatus].Value = row.Status;
+                return;
+            }
 
-                ApplyRowStatusStyle(gridRow, row.Status);
-            }
-            finally
-            {
-                suppressGridEvents = previousSuppressGridEvents;
-            }
+            gridRow.Cells[ColumnApply].Value =
+                row.Apply;
+
+            gridRow.Cells[ColumnFeatureName].Value =
+                row.FeatureName;
+
+            gridRow.Cells[ColumnProfileType].Value =
+                CutListProfilePropertyCommand
+                    .NormalizeProfileType(
+                        row.ProfileType);
+
+            gridRow.Cells[ColumnDescription].Value =
+                row.Description;
+
+            gridRow.Cells[ColumnBrand].Value =
+                row.Brand;
+
+            gridRow.Cells[ColumnModel].Value =
+                row.Model;
+
+            gridRow.Cells[ColumnExtraProperties].Value =
+                row.ExtraProperties;
+
+            gridRow.Cells[ColumnExisting].Value =
+                BuildExistingValueText(row);
+
+            gridRow.Cells[ColumnStatus].Value =
+                row.Status;
+
+            ApplyRowStatusStyle(
+                gridRow,
+                row.Status);
         }
 
-        private static string Display(string value)
+        private static string BuildExistingValueText(
+            CutListProfilePropertyCommand
+                .CutListGridRow row)
         {
-            return string.IsNullOrWhiteSpace(value)
-                ? "<blank>"
-                : value;
+            return
+                "Description=" +
+                (row.ExistingDescription ??
+                 string.Empty) +
+                "; Brand=" +
+                (row.ExistingBrand ??
+                 string.Empty) +
+                "; Model=" +
+                (row.ExistingModel ??
+                 string.Empty);
         }
 
         private void Grid_CurrentCellDirtyStateChanged(
@@ -1593,7 +2416,9 @@ namespace SolidDNA
         {
             if (grid.IsCurrentCellDirty)
             {
-                grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+                grid.CommitEdit(
+                    DataGridViewDataErrorContexts
+                        .Commit);
             }
         }
 
@@ -1601,136 +2426,109 @@ namespace SolidDNA
             object sender,
             DataGridViewCellEventArgs e)
         {
-            if (suppressGridEvents)
-                return;
-
             if (e.RowIndex < 0 ||
                 e.RowIndex >= grid.Rows.Count)
             {
                 return;
             }
 
-            DataGridViewRow gridRow = grid.Rows[e.RowIndex];
-            CutListProfilePropertyCommand.CutListGridRow row =
-                gridRow.Tag as CutListProfilePropertyCommand.CutListGridRow;
+            DataGridViewRow gridRow =
+                grid.Rows[e.RowIndex];
+
+            CutListProfilePropertyCommand
+                .CutListGridRow row =
+                    gridRow.Tag
+                    as CutListProfilePropertyCommand
+                        .CutListGridRow;
 
             if (row == null)
                 return;
 
-            ReadGridRowToModel(gridRow, row);
+            ReadGridRowToModel(
+                gridRow,
+                row);
 
-            if (e.ColumnIndex == ColumnProfileType)
-            {
-                CutListProfilePropertyCommand.ApplyProfilePreset(
-                    row,
-                    row.ProfileType,
-                    row.Description,
-                    row.Brand,
-                    row.Model);
+            row.Status =
+                "Ready";
 
-                if (string.Equals(row.ProfileType,
-                        CutListProfilePropertyCommand.CustomProfileName,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    row.Description =
-                        Convert.ToString(
-                            gridRow.Cells[ColumnDescription].Value) ??
-                        string.Empty;
-                    row.Brand =
-                        Convert.ToString(
-                            gridRow.Cells[ColumnBrand].Value) ??
-                        string.Empty;
-                    row.Model =
-                        Convert.ToString(
-                            gridRow.Cells[ColumnModel].Value) ??
-                        string.Empty;
-                }
+            gridRow.Cells[ColumnStatus].Value =
+                row.Status;
 
-                if (string.Equals(row.ProfileType,
-                        CutListProfilePropertyCommand.SkipProfileName,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    row.Apply = false;
-                    row.Status = "Skipped";
-                }
-                else
-                {
-                    row.Apply = true;
-                    row.Status = "Ready - checked for update";
-                }
-
-                WriteGridRowFromModel(gridRow, row);
-                return;
-            }
-
-            if (e.ColumnIndex == ColumnDescription ||
-                e.ColumnIndex == ColumnBrand ||
-                e.ColumnIndex == ColumnModel ||
-                e.ColumnIndex == ColumnExtraProperties)
-            {
-                if (!string.IsNullOrWhiteSpace(row.Description) ||
-                    !string.IsNullOrWhiteSpace(row.Brand) ||
-                    !string.IsNullOrWhiteSpace(row.Model) ||
-                    !string.IsNullOrWhiteSpace(row.ExtraProperties))
-                {
-                    row.Apply = true;
-                    row.Status = "Ready - checked for update";
-                    WriteGridRowFromModel(gridRow, row);
-                }
-            }
+            ApplyRowStatusStyle(
+                gridRow,
+                row.Status);
         }
 
         private void Grid_DataError(
             object sender,
             DataGridViewDataErrorEventArgs e)
         {
-            e.ThrowException = false;
+            e.ThrowException =
+                false;
         }
 
         private void ReadGridRowToModel(
             DataGridViewRow gridRow,
-            CutListProfilePropertyCommand.CutListGridRow row)
+            CutListProfilePropertyCommand
+                .CutListGridRow row)
         {
             row.Apply =
                 Convert.ToBoolean(
-                    gridRow.Cells[ColumnApply].Value ?? false);
+                    gridRow.Cells[ColumnApply]
+                        .Value ??
+                    false);
 
             row.ProfileType =
                 Convert.ToString(
-                    gridRow.Cells[ColumnProfileType].Value) ??
-                CutListProfilePropertyCommand.SkipProfileName;
+                    gridRow.Cells[ColumnProfileType]
+                        .Value) ??
+                CutListProfilePropertyCommand
+                    .SkipProfileName;
 
             row.Description =
                 Convert.ToString(
-                    gridRow.Cells[ColumnDescription].Value) ??
+                    gridRow.Cells[ColumnDescription]
+                        .Value) ??
                 string.Empty;
 
             row.Brand =
                 Convert.ToString(
-                    gridRow.Cells[ColumnBrand].Value) ??
+                    gridRow.Cells[ColumnBrand]
+                        .Value) ??
                 string.Empty;
 
             row.Model =
                 Convert.ToString(
-                    gridRow.Cells[ColumnModel].Value) ??
+                    gridRow.Cells[ColumnModel]
+                        .Value) ??
                 string.Empty;
 
             row.ExtraProperties =
                 Convert.ToString(
-                    gridRow.Cells[ColumnExtraProperties].Value) ??
+                    gridRow.Cells[ColumnExtraProperties]
+                        .Value) ??
                 string.Empty;
         }
 
         private void ReadAllGridRowsToModels()
         {
-            foreach (DataGridViewRow gridRow in grid.Rows)
+            if (grid == null)
+                return;
+
+            foreach (DataGridViewRow gridRow
+                     in grid.Rows)
             {
-                CutListProfilePropertyCommand.CutListGridRow row =
-                    gridRow.Tag as CutListProfilePropertyCommand.CutListGridRow;
+                CutListProfilePropertyCommand
+                    .CutListGridRow row =
+                        gridRow.Tag
+                        as CutListProfilePropertyCommand
+                            .CutListGridRow;
 
                 if (row != null)
                 {
-                    ReadGridRowToModel(gridRow, row);
+                    ReadGridRowToModel(
+                        gridRow,
+                        row);
                 }
             }
         }
@@ -1738,32 +2536,59 @@ namespace SolidDNA
         private void ApplyPresetToTextBoxes()
         {
             string selectedPreset =
-                Convert.ToString(presetComboBox.SelectedItem) ??
-                CutListProfilePropertyCommand.TopProfileName;
+                Convert.ToString(
+                    presetComboBox.SelectedItem) ??
+                CutListProfilePropertyCommand
+                    .BottomProfileName;
 
             if (string.Equals(
                     selectedPreset,
-                    CutListProfilePropertyCommand.TopProfileName,
+                    CutListProfilePropertyCommand
+                        .TopProfileName,
                     StringComparison.OrdinalIgnoreCase))
             {
                 presetDescriptionTextBox.Text =
-                    CutListProfilePropertyCommand.TopDescriptionValue;
+                    CutListProfilePropertyCommand
+                        .TopDescriptionValue;
+
                 presetBrandTextBox.Text =
-                    CutListProfilePropertyCommand.StandardBrandValue;
+                    CutListProfilePropertyCommand
+                        .StandardBrandValue;
+
                 presetModelTextBox.Text =
-                    CutListProfilePropertyCommand.StandardModelValue;
+                    CutListProfilePropertyCommand
+                        .StandardModelValue;
             }
             else if (string.Equals(
                     selectedPreset,
-                    CutListProfilePropertyCommand.BottomProfileName,
+                    CutListProfilePropertyCommand
+                        .BottomProfileName,
                     StringComparison.OrdinalIgnoreCase))
             {
                 presetDescriptionTextBox.Text =
-                    CutListProfilePropertyCommand.BottomDescriptionValue;
+                    CutListProfilePropertyCommand
+                        .BottomDescriptionValue;
+
                 presetBrandTextBox.Text =
-                    CutListProfilePropertyCommand.StandardBrandValue;
+                    CutListProfilePropertyCommand
+                        .StandardBrandValue;
+
                 presetModelTextBox.Text =
-                    CutListProfilePropertyCommand.StandardModelValue;
+                    CutListProfilePropertyCommand
+                        .StandardModelValue;
+            }
+            else if (string.Equals(
+                    selectedPreset,
+                    CutListProfilePropertyCommand
+                        .SkipProfileName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                presetDescriptionTextBox.Text =
+                    string.Empty;
+                presetBrandTextBox.Text =
+                    string.Empty;
+                presetModelTextBox.Text =
+                    string.Empty;
             }
         }
 
@@ -1788,43 +2613,62 @@ namespace SolidDNA
             ApplyPresetToRows(false);
         }
 
-        private void ApplyPresetToRows(bool checkedOnly)
+        private void ApplyPresetToRows(
+            bool checkedOnly)
         {
             ReadAllGridRowsToModels();
 
             string selectedPreset =
-                Convert.ToString(presetComboBox.SelectedItem) ??
-                CutListProfilePropertyCommand.TopProfileName;
+                Convert.ToString(
+                    presetComboBox.SelectedItem) ??
+                CutListProfilePropertyCommand
+                    .BottomProfileName;
 
             int count = 0;
 
-            foreach (DataGridViewRow gridRow in grid.Rows)
+            foreach (DataGridViewRow gridRow
+                     in grid.Rows)
             {
-                CutListProfilePropertyCommand.CutListGridRow row =
-                    gridRow.Tag as CutListProfilePropertyCommand.CutListGridRow;
+                CutListProfilePropertyCommand
+                    .CutListGridRow row =
+                        gridRow.Tag
+                        as CutListProfilePropertyCommand
+                            .CutListGridRow;
 
                 if (row == null)
                     continue;
 
-                if (checkedOnly && !row.Apply)
+                if (checkedOnly &&
+                    !row.Apply)
+                {
                     continue;
+                }
 
-                row.Apply = true;
+                row.Apply =
+                    true;
 
-                CutListProfilePropertyCommand.ApplyProfilePreset(
-                    row,
-                    selectedPreset,
-                    presetDescriptionTextBox.Text,
-                    presetBrandTextBox.Text,
-                    presetModelTextBox.Text);
+                CutListProfilePropertyCommand
+                    .ApplyProfilePreset(
+                        row,
+                        selectedPreset,
+                        presetDescriptionTextBox.Text,
+                        presetBrandTextBox.Text,
+                        presetModelTextBox.Text);
 
-                row.Status = "Ready";
-                WriteGridRowFromModel(gridRow, row);
+                row.Status =
+                    "Ready";
+
+                WriteGridRowFromModel(
+                    gridRow,
+                    row);
+
                 count++;
             }
 
             statusLabel.Text =
-                "Applied preset to " + count + " row(s).";
+                "Applied preset to " +
+                count +
+                " row(s).";
         }
 
         private void AddCustomCheckedButton_Click(
@@ -1841,17 +2685,22 @@ namespace SolidDNA
             AddCustomPropertyToRows(false);
         }
 
-        private void AddCustomPropertyToRows(bool checkedOnly)
+        private void AddCustomPropertyToRows(
+            bool checkedOnly)
         {
             string propertyName =
-                customPropertyNameTextBox.Text == null
+                customPropertyNameTextBox.Text ==
+                    null
                     ? string.Empty
-                    : customPropertyNameTextBox.Text.Trim();
+                    : customPropertyNameTextBox
+                        .Text.Trim();
 
             string propertyValue =
-                customPropertyValueTextBox.Text ?? string.Empty;
+                customPropertyValueTextBox.Text ??
+                string.Empty;
 
-            if (string.IsNullOrWhiteSpace(propertyName))
+            if (string.IsNullOrWhiteSpace(
+                    propertyName))
             {
                 MessageBox.Show(
                     "Enter the custom property name first.",
@@ -1865,26 +2714,40 @@ namespace SolidDNA
 
             int count = 0;
 
-            foreach (DataGridViewRow gridRow in grid.Rows)
+            foreach (DataGridViewRow gridRow
+                     in grid.Rows)
             {
-                CutListProfilePropertyCommand.CutListGridRow row =
-                    gridRow.Tag as CutListProfilePropertyCommand.CutListGridRow;
+                CutListProfilePropertyCommand
+                    .CutListGridRow row =
+                        gridRow.Tag
+                        as CutListProfilePropertyCommand
+                            .CutListGridRow;
 
                 if (row == null)
                     continue;
 
-                if (checkedOnly && !row.Apply)
+                if (checkedOnly &&
+                    !row.Apply)
+                {
                     continue;
+                }
 
-                row.Apply = true;
+                row.Apply =
+                    true;
+
                 row.ExtraProperties =
                     AddOrReplaceExtraPropertyText(
                         row.ExtraProperties,
                         propertyName,
                         propertyValue);
-                row.Status = "Ready";
 
-                WriteGridRowFromModel(gridRow, row);
+                row.Status =
+                    "Ready";
+
+                WriteGridRowFromModel(
+                    gridRow,
+                    row);
+
                 count++;
             }
 
@@ -1903,45 +2766,41 @@ namespace SolidDNA
                 new Dictionary<string, string>(
                     StringComparer.OrdinalIgnoreCase);
 
-            if (!string.IsNullOrWhiteSpace(existing))
+            List<KeyValuePair<string, string>>
+                parsed =
+                    CutListProfilePropertyCommand
+                        .ParseExtraProperties(
+                            existing);
+
+            foreach (
+                KeyValuePair<string, string> pair
+                in parsed)
             {
-                string[] entries = existing
-                    .Replace("\r\n", ";")
-                    .Replace("\n", ";")
-                    .Replace("\r", ";")
-                    .Split(new[] { ';' },
-                        StringSplitOptions.RemoveEmptyEntries);
-
-                foreach (string entry in entries)
-                {
-                    int separatorIndex = entry.IndexOf('=');
-                    if (separatorIndex <= 0)
-                        continue;
-
-                    string name =
-                        entry.Substring(0, separatorIndex).Trim();
-                    string value =
-                        entry.Substring(separatorIndex + 1).Trim();
-
-                    if (!string.IsNullOrWhiteSpace(name))
-                    {
-                        values[name] = value;
-                    }
-                }
+                values[pair.Key] =
+                    pair.Value;
             }
 
-            values[propertyName] = propertyValue ?? string.Empty;
+            values[propertyName] =
+                propertyValue ??
+                string.Empty;
 
-            StringBuilder builder = new StringBuilder();
+            StringBuilder builder =
+                new StringBuilder();
 
-            foreach (KeyValuePair<string, string> pair in values)
+            foreach (
+                KeyValuePair<string, string> pair
+                in values)
             {
                 if (builder.Length > 0)
+                {
                     builder.Append("; ");
+                }
 
-                builder.Append(pair.Key);
+                builder.Append(
+                    pair.Key);
                 builder.Append("=");
-                builder.Append(pair.Value);
+                builder.Append(
+                    pair.Value);
             }
 
             return builder.ToString();
@@ -1951,16 +2810,42 @@ namespace SolidDNA
             object sender,
             EventArgs e)
         {
+            ApplyRows(false);
+        }
+
+        private void ApplyAllButton_Click(
+            object sender,
+            EventArgs e)
+        {
+            ApplyRows(true);
+        }
+
+        private void ApplyRows(
+            bool forceAllRows)
+        {
             try
             {
                 ReadAllGridRowsToModels();
 
-                List<CutListProfilePropertyCommand.CutListGridRow>
+                List<
+                    CutListProfilePropertyCommand
+                        .CutListGridRow>
                     rowsToApply =
-                        new List<CutListProfilePropertyCommand.CutListGridRow>();
+                        new List<
+                            CutListProfilePropertyCommand
+                                .CutListGridRow>();
 
-                foreach (CutListProfilePropertyCommand.CutListGridRow row in rows)
+                foreach (
+                    CutListProfilePropertyCommand
+                        .CutListGridRow row
+                    in rows)
                 {
+                    if (forceAllRows)
+                    {
+                        row.Apply =
+                            true;
+                    }
+
                     if (row.Apply)
                     {
                         rowsToApply.Add(row);
@@ -1977,46 +2862,70 @@ namespace SolidDNA
                     return;
                 }
 
-                DialogResult confirmation = MessageBox.Show(
-                    "This will write cut-list properties to " +
-                    rowsToApply.Count +
-                    " checked cut-list row(s).\r\n\r\n" +
-                    "The part will be rebuilt but not saved automatically. Continue?",
-                    "Cabin Tools - Apply Cut List Properties",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
+                DialogResult confirmation =
+                    MessageBox.Show(
+                        "This will write cut-list properties to " +
+                        rowsToApply.Count +
+                        " cut-list row(s).\r\n\r\n" +
+                        "The part will be rebuilt but not saved automatically. Continue?",
+                        "Cabin Tools - Apply Cut List Properties",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
 
-                if (confirmation != DialogResult.Yes)
-                    return;
-
-                CutListProfilePropertyCommand.CutListWriteReport report =
-                    CutListProfilePropertyCommand.ApplyRows(
-                        modelDoc,
-                        rowsToApply);
-
-                foreach (DataGridViewRow gridRow in grid.Rows)
+                if (confirmation !=
+                    DialogResult.Yes)
                 {
-                    CutListProfilePropertyCommand.CutListGridRow row =
-                        gridRow.Tag as CutListProfilePropertyCommand.CutListGridRow;
+                    return;
+                }
+
+                CutListProfilePropertyCommand
+                    .CutListWriteReport report =
+                        CutListProfilePropertyCommand
+                            .ApplyRows(
+                                modelDoc,
+                                rowsToApply);
+
+                foreach (DataGridViewRow gridRow
+                         in grid.Rows)
+                {
+                    CutListProfilePropertyCommand
+                        .CutListGridRow row =
+                            gridRow.Tag
+                            as CutListProfilePropertyCommand
+                                .CutListGridRow;
+
                     if (row != null)
                     {
-                        WriteGridRowFromModel(gridRow, row);
+                        WriteGridRowFromModel(
+                            gridRow,
+                            row);
                     }
                 }
 
                 statusLabel.Text =
-                    "Updated " + report.UpdatedRows.Count +
-                    " row(s), skipped " + report.SkippedRows.Count +
-                    ", failed " + report.FailedRows.Count +
-                    ". Report: " + report.ReportPath;
+                    "Updated " +
+                    report.UpdatedRows.Count +
+                    " row(s), skipped " +
+                    report.SkippedRows.Count +
+                    ", failed " +
+                    report.FailedRows.Count +
+                    ". Report: " +
+                    report.ReportPath;
 
                 MessageBox.Show(
                     "Cut-list property update complete.\r\n\r\n" +
-                    "Updated rows: " + report.UpdatedRows.Count + "\r\n" +
-                    "Skipped rows: " + report.SkippedRows.Count + "\r\n" +
-                    "Failed rows: " + report.FailedRows.Count + "\r\n\r\n" +
+                    "Updated rows: " +
+                    report.UpdatedRows.Count +
+                    "\r\n" +
+                    "Skipped rows: " +
+                    report.SkippedRows.Count +
+                    "\r\n" +
+                    "Failed rows: " +
+                    report.FailedRows.Count +
+                    "\r\n\r\n" +
                     "The part was rebuilt but not saved automatically.\r\n\r\n" +
-                    "Report:\r\n" + report.ReportPath,
+                    "Report:\r\n" +
+                    report.ReportPath,
                     "Cabin Tools - Cut List Properties",
                     MessageBoxButtons.OK,
                     report.FailedRows.Count > 0
@@ -2034,40 +2943,41 @@ namespace SolidDNA
             }
         }
 
-        private void ApplyAllButton_Click(
-            object sender,
-            EventArgs e)
-        {
-            SetCheckedStateForAllRows(true);
-            ApplyCheckedButton_Click(sender, e);
-        }
-
-        private void SelectAllButton_Click(
+        private void CheckAllButton_Click(
             object sender,
             EventArgs e)
         {
             SetCheckedStateForAllRows(true);
         }
 
-        private void ClearAllButton_Click(
+        private void UncheckAllButton_Click(
             object sender,
             EventArgs e)
         {
             SetCheckedStateForAllRows(false);
         }
 
-        private void SetCheckedStateForAllRows(bool isChecked)
+        private void SetCheckedStateForAllRows(
+            bool isChecked)
         {
-            foreach (DataGridViewRow gridRow in grid.Rows)
+            foreach (DataGridViewRow gridRow
+                     in grid.Rows)
             {
-                CutListProfilePropertyCommand.CutListGridRow row =
-                    gridRow.Tag as CutListProfilePropertyCommand.CutListGridRow;
+                CutListProfilePropertyCommand
+                    .CutListGridRow row =
+                        gridRow.Tag
+                        as CutListProfilePropertyCommand
+                            .CutListGridRow;
 
                 if (row == null)
                     continue;
 
-                row.Apply = isChecked;
-                WriteGridRowFromModel(gridRow, row);
+                row.Apply =
+                    isChecked;
+
+                WriteGridRowFromModel(
+                    gridRow,
+                    row);
             }
         }
 
@@ -2085,19 +2995,6 @@ namespace SolidDNA
             Close();
         }
 
-        private void AutoSizeStatusCells()
-        {
-            foreach (DataGridViewRow gridRow in grid.Rows)
-            {
-                CutListProfilePropertyCommand.CutListGridRow row =
-                    gridRow.Tag as CutListProfilePropertyCommand.CutListGridRow;
-                if (row != null)
-                {
-                    ApplyRowStatusStyle(gridRow, row.Status);
-                }
-            }
-        }
-
         private static void ApplyRowStatusStyle(
             DataGridViewRow gridRow,
             string status)
@@ -2108,33 +3005,46 @@ namespace SolidDNA
             DataGridViewCell statusCell =
                 gridRow.Cells[ColumnStatus];
 
-            statusCell.Style.BackColor = Color.White;
-            statusCell.Style.ForeColor = Color.Black;
+            statusCell.Style.BackColor =
+                Color.White;
+            statusCell.Style.ForeColor =
+                Color.Black;
 
             if (status == null)
                 return;
 
-            if (status.StartsWith("!",
+            if (status.StartsWith(
+                    "!",
                     StringComparison.OrdinalIgnoreCase) ||
-                status.IndexOf("failed",
+                status.IndexOf(
+                    "failed",
                     StringComparison.OrdinalIgnoreCase) >= 0 ||
-                status.IndexOf("blank",
+                status.IndexOf(
+                    "blank",
                     StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                statusCell.Style.BackColor = Color.MistyRose;
-                statusCell.Style.ForeColor = Color.DarkRed;
+                statusCell.Style.BackColor =
+                    Color.MistyRose;
+                statusCell.Style.ForeColor =
+                    Color.DarkRed;
             }
-            else if (status.IndexOf("updated",
+            else if (status.IndexOf(
+                         "updated",
                          StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                statusCell.Style.BackColor = Color.Honeydew;
-                statusCell.Style.ForeColor = Color.DarkGreen;
+                statusCell.Style.BackColor =
+                    Color.Honeydew;
+                statusCell.Style.ForeColor =
+                    Color.DarkGreen;
             }
-            else if (status.IndexOf("skipped",
+            else if (status.IndexOf(
+                         "skipped",
                          StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                statusCell.Style.BackColor = Color.LightYellow;
-                statusCell.Style.ForeColor = Color.DarkGoldenrod;
+                statusCell.Style.BackColor =
+                    Color.LightYellow;
+                statusCell.Style.ForeColor =
+                    Color.DarkGoldenrod;
             }
         }
     }
