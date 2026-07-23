@@ -131,6 +131,10 @@
     </Compile>
     <Compile Include="CutListProfilePropertyCommand.cs" />
     <Compile Include="ConfigurationPartNumberCommand.cs" />
+    <Compile Include="DrawingTitlePropertyCommand.cs" />
+    <Compile Include="PdfPropertyForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="PreviousVersionDrawingCommand.cs" />
     <Compile Include="PreviousVersionDrawingForm.cs">
       <SubType>Form</SubType>
@@ -266,6 +270,20 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="MissingPropertyForm.resx">
+      <DependentUpon>MissingPropertyForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="PdfBatchExportForm.resx">
+      <DependentUpon>PdfBatchExportForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="PreviousVersionDrawingForm.resx">
+      <DependentUpon>PreviousVersionDrawingForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="SheetFormatForm.resx">
+      <DependentUpon>SheetFormatForm.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
