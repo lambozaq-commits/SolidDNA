@@ -350,11 +350,15 @@ namespace SolidDNA
             warningTextBox.ReadOnly = true;
             warningTextBox.ScrollBars =
                 ScrollBars.Vertical;
+            warningTextBox.Font =
+                new System.Drawing.Font(
+                    Font.FontFamily,
+                    10.5F,
+                    System.Drawing.FontStyle.Bold);
+
             warningTextBox.Text =
-                "Important:\r\n" +
-                "The selected .slddrt replaces the previous sheet format. Existing sheet-format note changes are not retained.\r\n\r\n" +
-                "When 'Apply one selected sheet format to all sheets' is selected, the individual sheet selection table is disabled intentionally.\r\n\r\n" +
-                "The drawing is rebuilt but is not saved automatically. Test first on a copied drawing or checked-out test drawing.";
+                "IMPORTANT:\r\n" +
+                "The selected .slddrt replaces the previous sheet format. Existing sheet-format note changes are not retained.";
 
             mainLayout.Controls.Add(
                 warningTextBox,
@@ -401,11 +405,38 @@ namespace SolidDNA
             foreach (SheetFormatAssignment assignment in
                 assignments)
             {
-                sheetGrid.Rows.Add(
+                int rowIndex = sheetGrid.Rows.Add(
                     assignment.SheetName,
-                    assignment.CurrentTemplatePath,
-                    assignment.NewTemplatePath,
+                    GetSheetFormatDisplayName(assignment.CurrentTemplatePath),
+                    GetSheetFormatDisplayName(assignment.NewTemplatePath),
                     "Browse...");
+
+                DataGridViewRow row = sheetGrid.Rows[rowIndex];
+                row.Cells[1].ToolTipText = assignment.CurrentTemplatePath;
+                row.Cells[2].ToolTipText = assignment.NewTemplatePath;
+            }
+        }
+
+        private static string GetSheetFormatDisplayName(
+            string sheetFormatPath)
+        {
+            if (string.IsNullOrWhiteSpace(sheetFormatPath))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                string fileName = Path.GetFileNameWithoutExtension(
+                    sheetFormatPath);
+
+                return string.IsNullOrWhiteSpace(fileName)
+                    ? sheetFormatPath
+                    : fileName;
+            }
+            catch
+            {
+                return sheetFormatPath;
             }
         }
 
@@ -483,8 +514,7 @@ namespace SolidDNA
                 sheetGrid.Rows[e.RowIndex];
 
             string existingPath =
-                Convert.ToString(
-                    row.Cells[2].Value);
+                assignments[e.RowIndex].NewTemplatePath;
 
             string selectedPath =
                 SelectSheetFormatFile(existingPath);
@@ -494,7 +524,9 @@ namespace SolidDNA
                 return;
             }
 
-            row.Cells[2].Value = selectedPath;
+            row.Cells[2].Value =
+                GetSheetFormatDisplayName(selectedPath);
+            row.Cells[2].ToolTipText = selectedPath;
 
             assignments[e.RowIndex].NewTemplatePath =
                 selectedPath;
@@ -698,9 +730,7 @@ namespace SolidDNA
                             .Cells[0].Value);
 
                 string newPath =
-                    Convert.ToString(
-                        sheetGrid.Rows[rowIndex]
-                            .Cells[2].Value);
+                    assignments[rowIndex].NewTemplatePath;
 
                 if (string.IsNullOrWhiteSpace(newPath))
                 {

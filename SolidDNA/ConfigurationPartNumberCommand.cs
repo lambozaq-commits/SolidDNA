@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -27,6 +27,13 @@ namespace SolidDNA
         private const string BomPartNumberColumnName = "__BomPartNumber";
         private const string DerivedColumnName = "__Derived";
         private const string StatusColumnName = "__Status";
+
+        private enum RowTargetScope
+        {
+            Cancelled,
+            CheckedRows,
+            AllRows
+        }
 
         public static void ShowConfigurationPartNumberForm()
         {
@@ -233,6 +240,7 @@ namespace SolidDNA
             private TextBox prefixTextBox;
             private TextBox suffixTextBox;
             private CheckBox overwriteBomNumbersCheckBox;
+            private CheckBox includeDerivedInBulkNumberingCheckBox;
 
             public ConfigurationPropertyEditorForm(IModelDoc2 modelDoc)
             {
@@ -252,6 +260,8 @@ namespace SolidDNA
 
             private void BuildLayout()
             {
+                MinimumSize = new Size(980, 560);
+
                 Label helpLabel = new Label();
                 helpLabel.Text = "Edit configuration description, SOLIDWORKS BOM part number, and selected configuration-specific custom-property columns. Empty cells are not written.";
                 helpLabel.Left = 12;
@@ -261,30 +271,30 @@ namespace SolidDNA
                 Controls.Add(helpLabel);
 
                 Button chooseColumnsButton = new Button();
-                chooseColumnsButton.Text = "Choose custom-property columns";
+                chooseColumnsButton.Text = "Choose columns";
                 chooseColumnsButton.Left = 12;
                 chooseColumnsButton.Top = 42;
-                chooseColumnsButton.Width = 210;
+                chooseColumnsButton.Width = 135;
                 chooseColumnsButton.Click += delegate { ChooseColumns(); };
                 Controls.Add(chooseColumnsButton);
 
                 Button addColumnButton = new Button();
-                addColumnButton.Text = "Add new custom-property column";
-                addColumnButton.Left = 230;
+                addColumnButton.Text = "Add property column";
+                addColumnButton.Left = 155;
                 addColumnButton.Top = 42;
-                addColumnButton.Width = 220;
+                addColumnButton.Width = 150;
                 addColumnButton.Click += delegate { AddNewPropertyColumn(); };
                 Controls.Add(addColumnButton);
 
                 Label propertyLabel = new Label();
                 propertyLabel.Text = "Column:";
-                propertyLabel.Left = 470;
+                propertyLabel.Left = 325;
                 propertyLabel.Top = 47;
                 propertyLabel.Width = 60;
                 Controls.Add(propertyLabel);
 
                 propertySelector = new ComboBox();
-                propertySelector.Left = 530;
+                propertySelector.Left = 390;
                 propertySelector.Top = 42;
                 propertySelector.Width = 180;
                 propertySelector.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -293,33 +303,25 @@ namespace SolidDNA
 
                 Label valueLabel = new Label();
                 valueLabel.Text = "Value:";
-                valueLabel.Left = 720;
+                valueLabel.Left = 580;
                 valueLabel.Top = 47;
                 valueLabel.Width = 45;
                 Controls.Add(valueLabel);
 
                 valueSelector = new ComboBox();
-                valueSelector.Left = 770;
+                valueSelector.Left = 630;
                 valueSelector.Top = 42;
-                valueSelector.Width = 185;
+                valueSelector.Width = 210;
                 valueSelector.DropDownStyle = ComboBoxStyle.DropDown;
                 Controls.Add(valueSelector);
 
-                Button setCheckedButton = new Button();
-                setCheckedButton.Text = "Set value to checked";
-                setCheckedButton.Left = 965;
-                setCheckedButton.Top = 42;
-                setCheckedButton.Width = 140;
-                setCheckedButton.Click += delegate { SetSelectedColumnValue(false); };
-                Controls.Add(setCheckedButton);
-
-                Button setAllButton = new Button();
-                setAllButton.Text = "Set value to all";
-                setAllButton.Left = 1110;
-                setAllButton.Top = 42;
-                setAllButton.Width = 120;
-                setAllButton.Click += delegate { SetSelectedColumnValue(true); };
-                Controls.Add(setAllButton);
+                Button setValueButton = new Button();
+                setValueButton.Text = "Set value";
+                setValueButton.Left = 850;
+                setValueButton.Top = 42;
+                setValueButton.Width = 105;
+                setValueButton.Click += delegate { SetSelectedColumnValueSmart(); };
+                Controls.Add(setValueButton);
 
                 Label startLabel = new Label();
                 startLabel.Text = "Start:";
@@ -385,82 +387,59 @@ namespace SolidDNA
                 useMaxButton.Click += delegate { SetStartToMaxPlusOne(); };
                 Controls.Add(useMaxButton);
 
-                Button fillCheckedButton = new Button();
-                fillCheckedButton.Text = "Fill BOM checked blanks";
-                fillCheckedButton.Left = 655;
-                fillCheckedButton.Top = 76;
-                fillCheckedButton.Width = 155;
-                fillCheckedButton.Click += delegate { FillBomNumbers(false, true); };
-                Controls.Add(fillCheckedButton);
-
-                Button fillAllBlankButton = new Button();
-                fillAllBlankButton.Text = "Fill BOM all blanks";
-                fillAllBlankButton.Left = 815;
-                fillAllBlankButton.Top = 76;
-                fillAllBlankButton.Width = 140;
-                fillAllBlankButton.Click += delegate { FillBomNumbers(true, true); };
-                Controls.Add(fillAllBlankButton);
-
-                Button fillAllButton = new Button();
-                fillAllButton.Text = "Fill BOM all rows";
-                fillAllButton.Left = 960;
-                fillAllButton.Top = 76;
-                fillAllButton.Width = 120;
-                fillAllButton.Click += delegate { FillBomNumbers(true, false); };
-                Controls.Add(fillAllButton);
+                Button fillBomButton = new Button();
+                fillBomButton.Text = "Fill BOM numbers";
+                fillBomButton.Left = 655;
+                fillBomButton.Top = 76;
+                fillBomButton.Width = 135;
+                fillBomButton.Click += delegate { FillBomNumbersSmart(); };
+                Controls.Add(fillBomButton);
 
                 overwriteBomNumbersCheckBox = new CheckBox();
-                overwriteBomNumbersCheckBox.Text = "Allow overwrite existing BOM numbers";
-                overwriteBomNumbersCheckBox.Left = 1090;
-                overwriteBomNumbersCheckBox.Top = 80;
-                overwriteBomNumbersCheckBox.Width = 220;
+                overwriteBomNumbersCheckBox.Text = "Overwrite existing BOM numbers when applying";
+                overwriteBomNumbersCheckBox.Left = 12;
+                overwriteBomNumbersCheckBox.Top = 111;
+                overwriteBomNumbersCheckBox.Width = 330;
+                overwriteBomNumbersCheckBox.Checked = false;
                 Controls.Add(overwriteBomNumbersCheckBox);
 
-                Button clearCheckedButton = new Button();
-                clearCheckedButton.Text = "Clear selected column checked";
-                clearCheckedButton.Left = 12;
-                clearCheckedButton.Top = 108;
-                clearCheckedButton.Width = 190;
-                clearCheckedButton.Click += delegate { ClearSelectedColumn(false); };
-                Controls.Add(clearCheckedButton);
+                includeDerivedInBulkNumberingCheckBox = new CheckBox();
+                includeDerivedInBulkNumberingCheckBox.Text = "Include derived configs in bulk numbering";
+                includeDerivedInBulkNumberingCheckBox.Left = 355;
+                includeDerivedInBulkNumberingCheckBox.Top = 111;
+                includeDerivedInBulkNumberingCheckBox.Width = 330;
+                includeDerivedInBulkNumberingCheckBox.Checked = false;
+                Controls.Add(includeDerivedInBulkNumberingCheckBox);
 
-                Button clearAllButton = new Button();
-                clearAllButton.Text = "Clear selected column all";
-                clearAllButton.Left = 210;
-                clearAllButton.Top = 108;
-                clearAllButton.Width = 170;
-                clearAllButton.Click += delegate { ClearSelectedColumn(true); };
-                Controls.Add(clearAllButton);
+                Button clearColumnButton = new Button();
+                clearColumnButton.Text = "Clear column";
+                clearColumnButton.Left = 700;
+                clearColumnButton.Top = 106;
+                clearColumnButton.Width = 115;
+                clearColumnButton.Click += delegate { ClearSelectedColumnSmart(); };
+                Controls.Add(clearColumnButton);
 
-                Button checkAllButton = new Button();
-                checkAllButton.Text = "Check all";
-                checkAllButton.Left = 390;
-                checkAllButton.Top = 108;
-                checkAllButton.Width = 90;
-                checkAllButton.Click += delegate { SetAllApply(true); };
-                Controls.Add(checkAllButton);
-
-                Button uncheckAllButton = new Button();
-                uncheckAllButton.Text = "Uncheck all";
-                uncheckAllButton.Left = 485;
-                uncheckAllButton.Top = 108;
-                uncheckAllButton.Width = 100;
-                uncheckAllButton.Click += delegate { SetAllApply(false); };
-                Controls.Add(uncheckAllButton);
+                Button toggleCheckButton = new Button();
+                toggleCheckButton.Text = "Check / uncheck all";
+                toggleCheckButton.Left = 825;
+                toggleCheckButton.Top = 106;
+                toggleCheckButton.Width = 140;
+                toggleCheckButton.Click += delegate { ToggleAllApply(); };
+                Controls.Add(toggleCheckButton);
 
                 Button refreshButton = new Button();
                 refreshButton.Text = "Refresh configurations";
-                refreshButton.Left = 595;
-                refreshButton.Top = 108;
-                refreshButton.Width = 145;
+                refreshButton.Left = 975;
+                refreshButton.Top = 106;
+                refreshButton.Width = 150;
                 refreshButton.Click += delegate { LoadConfigurationData(); BuildGrid(); };
                 Controls.Add(refreshButton);
 
                 grid = new DataGridView();
                 grid.Left = 12;
-                grid.Top = 142;
+                grid.Top = 152;
                 grid.Width = 1280;
-                grid.Height = 525;
+                grid.Height = 460;
                 grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 grid.AllowUserToAddRows = false;
                 grid.AllowUserToDeleteRows = false;
@@ -481,34 +460,25 @@ namespace SolidDNA
 
                 statusLabel = new Label();
                 statusLabel.Left = 12;
-                statusLabel.Top = 675;
+                statusLabel.Top = 620;
                 statusLabel.Width = 780;
-                statusLabel.Height = 50;
+                statusLabel.Height = 38;
                 statusLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
                 Controls.Add(statusLabel);
 
-                Button applyCheckedButton = new Button();
-                applyCheckedButton.Text = "Apply checked rows";
-                applyCheckedButton.Left = 880;
-                applyCheckedButton.Top = 710;
-                applyCheckedButton.Width = 140;
-                applyCheckedButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                applyCheckedButton.Click += delegate { ApplyRows(false); };
-                Controls.Add(applyCheckedButton);
-
-                Button applyAllButton = new Button();
-                applyAllButton.Text = "Apply all rows";
-                applyAllButton.Left = 1025;
-                applyAllButton.Top = 710;
-                applyAllButton.Width = 120;
-                applyAllButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                applyAllButton.Click += delegate { ApplyRows(true); };
-                Controls.Add(applyAllButton);
+                Button applyButton = new Button();
+                applyButton.Text = "Apply";
+                applyButton.Left = 950;
+                applyButton.Top = 620;
+                applyButton.Width = 110;
+                applyButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+                applyButton.Click += delegate { ApplyRowsSmart(); };
+                Controls.Add(applyButton);
 
                 Button closeButton = new Button();
                 closeButton.Text = "Close";
-                closeButton.Left = 1150;
-                closeButton.Top = 710;
+                closeButton.Left = 1070;
+                closeButton.Top = 620;
                 closeButton.Width = 100;
                 closeButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
                 closeButton.Click += delegate { Close(); };
@@ -667,6 +637,138 @@ namespace SolidDNA
                 if (string.Equals(displayName, "BOM Part Number", StringComparison.OrdinalIgnoreCase))
                     return BomPartNumberColumnName;
                 return displayName;
+            }
+
+            private void SetSelectedColumnValueSmart()
+            {
+                RowTargetScope scope = ResolveRowTargetScope("Set Value");
+                if (scope == RowTargetScope.Cancelled)
+                    return;
+                SetSelectedColumnValue(scope == RowTargetScope.AllRows);
+            }
+
+            private void ClearSelectedColumnSmart()
+            {
+                RowTargetScope scope = ResolveRowTargetScope("Clear Column");
+                if (scope == RowTargetScope.Cancelled)
+                    return;
+                ClearSelectedColumn(scope == RowTargetScope.AllRows);
+            }
+
+            private void ApplyRowsSmart()
+            {
+                RowTargetScope scope = ResolveRowTargetScope("Apply");
+                if (scope == RowTargetScope.Cancelled)
+                    return;
+                ApplyRows(scope == RowTargetScope.AllRows);
+            }
+
+            private void FillBomNumbersSmart()
+            {
+                RowTargetScope scope = ResolveRowTargetScope("Fill BOM Numbers");
+                if (scope == RowTargetScope.Cancelled)
+                    return;
+
+                bool blanksOnly = overwriteBomNumbersCheckBox == null || !overwriteBomNumbersCheckBox.Checked;
+                FillBomNumbers(scope == RowTargetScope.AllRows, blanksOnly);
+            }
+
+            private RowTargetScope ResolveRowTargetScope(string operationName)
+            {
+                int totalRows = CountRealRows();
+                if (totalRows == 0)
+                    return RowTargetScope.Cancelled;
+
+                int checkedRows = CountCheckedRows();
+
+                // If every row is checked, Checked Only and All are equivalent.
+                if (checkedRows == totalRows)
+                    return RowTargetScope.CheckedRows;
+
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - " + operationName;
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+                    dialog.ClientSize = new Size(360, 142);
+
+                    Label messageLabel = new Label();
+                    messageLabel.Left = 14;
+                    messageLabel.Top = 14;
+                    messageLabel.Width = 330;
+                    messageLabel.Height = 46;
+                    messageLabel.Text = operationName + " will affect which configurations?";
+                    dialog.Controls.Add(messageLabel);
+
+                    RowTargetScope selectedScope = RowTargetScope.Cancelled;
+
+                    Button allButton = new Button();
+                    allButton.Text = "All";
+                    allButton.Left = 18;
+                    allButton.Top = 82;
+                    allButton.Width = 96;
+                    allButton.DialogResult = DialogResult.OK;
+                    allButton.Click += delegate { selectedScope = RowTargetScope.AllRows; };
+                    dialog.Controls.Add(allButton);
+
+                    Button checkedButton = new Button();
+                    checkedButton.Text = "Checked Only";
+                    checkedButton.Left = 126;
+                    checkedButton.Top = 82;
+                    checkedButton.Width = 116;
+                    checkedButton.Enabled = checkedRows > 0;
+                    checkedButton.DialogResult = DialogResult.OK;
+                    checkedButton.Click += delegate { selectedScope = RowTargetScope.CheckedRows; };
+                    dialog.Controls.Add(checkedButton);
+
+                    Button cancelButton = new Button();
+                    cancelButton.Text = "Cancel";
+                    cancelButton.Left = 254;
+                    cancelButton.Top = 82;
+                    cancelButton.Width = 88;
+                    cancelButton.DialogResult = DialogResult.Cancel;
+                    cancelButton.Click += delegate { selectedScope = RowTargetScope.Cancelled; };
+                    dialog.Controls.Add(cancelButton);
+
+                    dialog.AcceptButton = allButton;
+                    dialog.CancelButton = cancelButton;
+
+                    dialog.ShowDialog(this);
+                    return selectedScope;
+                }
+            }
+
+            private int CountRealRows()
+            {
+                int count = 0;
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (!row.IsNewRow)
+                        count++;
+                }
+                return count;
+            }
+
+            private int CountCheckedRows()
+            {
+                int count = 0;
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (!row.IsNewRow && IsRowChecked(row))
+                        count++;
+                }
+                return count;
+            }
+
+            private void ToggleAllApply()
+            {
+                int totalRows = CountRealRows();
+                int checkedRows = CountCheckedRows();
+                bool newValue = !(totalRows > 0 && checkedRows == totalRows);
+                SetAllApply(newValue);
             }
 
             private void SetSelectedColumnValue(bool allRows)
@@ -903,6 +1005,16 @@ namespace SolidDNA
                         continue;
                     if (blanksOnly && !string.IsNullOrWhiteSpace(CellText(row, BomPartNumberColumnName)))
                         continue;
+
+                    ConfigurationInfo info = row.Tag as ConfigurationInfo;
+                    if (info != null &&
+                        info.IsDerived &&
+                        includeDerivedInBulkNumberingCheckBox != null &&
+                        !includeDerivedInBulkNumberingCheckBox.Checked)
+                    {
+                        row.Cells[StatusColumnName].Value = "Skipped - derived configuration";
+                        continue;
+                    }
 
                     string number = prefix + current.ToString(new string('0', digits)) + suffix;
                     row.Cells[BomPartNumberColumnName].Value = number;

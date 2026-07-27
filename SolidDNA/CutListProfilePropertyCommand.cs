@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -573,6 +573,13 @@ namespace SolidDNA
             private const string ItemColumnName = "__Item";
             private const string StatusColumnName = "__Status";
 
+            private enum RowTargetScope
+            {
+                Cancelled,
+                CheckedRows,
+                AllRows
+            }
+
             public CutListPropertyEditorForm(IModelDoc2 modelDoc)
             {
                 this.modelDoc = modelDoc;
@@ -591,6 +598,8 @@ namespace SolidDNA
 
             private void BuildLayout()
             {
+                MinimumSize = new Size(900, 520);
+
                 Label helpLabel = new Label();
                 helpLabel.Text = "Choose which cut-list properties are shown as columns. Empty cells are not written. Use Clear Column to intentionally blank a property.";
                 helpLabel.Left = 12;
@@ -600,30 +609,30 @@ namespace SolidDNA
                 Controls.Add(helpLabel);
 
                 Button chooseColumnsButton = new Button();
-                chooseColumnsButton.Text = "Choose property columns";
+                chooseColumnsButton.Text = "Choose columns";
                 chooseColumnsButton.Left = 12;
                 chooseColumnsButton.Top = 42;
-                chooseColumnsButton.Width = 170;
+                chooseColumnsButton.Width = 135;
                 chooseColumnsButton.Click += delegate { ChooseColumns(); };
                 Controls.Add(chooseColumnsButton);
 
                 Button addColumnButton = new Button();
-                addColumnButton.Text = "Add new property column";
-                addColumnButton.Left = 190;
+                addColumnButton.Text = "Add property column";
+                addColumnButton.Left = 155;
                 addColumnButton.Top = 42;
-                addColumnButton.Width = 170;
+                addColumnButton.Width = 145;
                 addColumnButton.Click += delegate { AddNewPropertyColumn(); };
                 Controls.Add(addColumnButton);
 
                 Label propertyLabel = new Label();
                 propertyLabel.Text = "Property:";
-                propertyLabel.Left = 380;
+                propertyLabel.Left = 320;
                 propertyLabel.Top = 47;
                 propertyLabel.Width = 60;
                 Controls.Add(propertyLabel);
 
                 propertySelector = new ComboBox();
-                propertySelector.Left = 445;
+                propertySelector.Left = 385;
                 propertySelector.Top = 42;
                 propertySelector.Width = 160;
                 propertySelector.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -632,114 +641,55 @@ namespace SolidDNA
 
                 Label valueLabel = new Label();
                 valueLabel.Text = "Value:";
-                valueLabel.Left = 615;
+                valueLabel.Left = 555;
                 valueLabel.Top = 47;
                 valueLabel.Width = 45;
                 Controls.Add(valueLabel);
 
                 valueSelector = new ComboBox();
-                valueSelector.Left = 665;
+                valueSelector.Left = 605;
                 valueSelector.Top = 42;
-                valueSelector.Width = 190;
+                valueSelector.Width = 205;
                 valueSelector.DropDownStyle = ComboBoxStyle.DropDown;
                 Controls.Add(valueSelector);
 
-                Button valueCheckedButton = new Button();
-                valueCheckedButton.Text = "Set value to checked";
-                valueCheckedButton.Left = 865;
-                valueCheckedButton.Top = 42;
-                valueCheckedButton.Width = 135;
-                valueCheckedButton.Click += delegate { SetSelectedPropertyValue(false); };
-                Controls.Add(valueCheckedButton);
+                Button setValueButton = new Button();
+                setValueButton.Text = "Set value";
+                setValueButton.Left = 820;
+                setValueButton.Top = 42;
+                setValueButton.Width = 105;
+                setValueButton.Click += delegate { SetSelectedPropertyValueSmart(); };
+                Controls.Add(setValueButton);
 
-                Button valueAllButton = new Button();
-                valueAllButton.Text = "Set value to all";
-                valueAllButton.Left = 1005;
-                valueAllButton.Top = 42;
-                valueAllButton.Width = 115;
-                valueAllButton.Click += delegate { SetSelectedPropertyValue(true); };
-                Controls.Add(valueAllButton);
+                Button clearColumnButton = new Button();
+                clearColumnButton.Text = "Clear column";
+                clearColumnButton.Left = 12;
+                clearColumnButton.Top = 74;
+                clearColumnButton.Width = 115;
+                clearColumnButton.Click += delegate { ClearSelectedColumnSmart(); };
+                Controls.Add(clearColumnButton);
 
-                Button clearCheckedButton = new Button();
-                clearCheckedButton.Text = "Clear column checked";
-                clearCheckedButton.Left = 12;
-                clearCheckedButton.Top = 74;
-                clearCheckedButton.Width = 150;
-                clearCheckedButton.Click += delegate { ClearSelectedColumn(false); };
-                Controls.Add(clearCheckedButton);
-
-                Button clearAllButton = new Button();
-                clearAllButton.Text = "Clear column all";
-                clearAllButton.Left = 170;
-                clearAllButton.Top = 74;
-                clearAllButton.Width = 125;
-                clearAllButton.Click += delegate { ClearSelectedColumn(true); };
-                Controls.Add(clearAllButton);
-
-                Button checkAllButton = new Button();
-                checkAllButton.Text = "Check all";
-                checkAllButton.Left = 305;
-                checkAllButton.Top = 74;
-                checkAllButton.Width = 90;
-                checkAllButton.Click += delegate { SetAllApply(true); };
-                Controls.Add(checkAllButton);
-
-                Button uncheckAllButton = new Button();
-                uncheckAllButton.Text = "Uncheck all";
-                uncheckAllButton.Left = 402;
-                uncheckAllButton.Top = 74;
-                uncheckAllButton.Width = 100;
-                uncheckAllButton.Click += delegate { SetAllApply(false); };
-                Controls.Add(uncheckAllButton);
+                Button toggleCheckButton = new Button();
+                toggleCheckButton.Text = "Check / uncheck all";
+                toggleCheckButton.Left = 135;
+                toggleCheckButton.Top = 74;
+                toggleCheckButton.Width = 140;
+                toggleCheckButton.Click += delegate { ToggleAllApply(); };
+                Controls.Add(toggleCheckButton);
 
                 Button refreshButton = new Button();
                 refreshButton.Text = "Refresh cut-list items";
-                refreshButton.Left = 510;
+                refreshButton.Left = 285;
                 refreshButton.Top = 74;
-                refreshButton.Width = 140;
+                refreshButton.Width = 150;
                 refreshButton.Click += delegate { LoadCutListData(); BuildGrid(); };
                 Controls.Add(refreshButton);
-
-                Button applyCheckedButton = new Button();
-                applyCheckedButton.Text = "Apply checked rows";
-                applyCheckedButton.Left = 790;
-                applyCheckedButton.Top = 704;
-                applyCheckedButton.Width = 140;
-                applyCheckedButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                applyCheckedButton.Click += delegate { ApplyRows(false); };
-                Controls.Add(applyCheckedButton);
-
-                Button applyAllButton = new Button();
-                applyAllButton.Text = "Apply all rows";
-                applyAllButton.Left = 935;
-                applyAllButton.Top = 704;
-                applyAllButton.Width = 120;
-                applyAllButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                applyAllButton.Click += delegate { ApplyRows(true); };
-                Controls.Add(applyAllButton);
-
-                Button closeButton = new Button();
-                closeButton.Text = "Close";
-                closeButton.Left = 1060;
-                closeButton.Top = 704;
-                closeButton.Width = 100;
-                closeButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                closeButton.Click += delegate { Close(); };
-                Controls.Add(closeButton);
-
-                statusLabel = new Label();
-                statusLabel.Left = 12;
-                statusLabel.Top = 682;
-                statusLabel.Width = 760;
-                statusLabel.Height = 40;
-                statusLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-                Controls.Add(statusLabel);
 
                 grid = new DataGridView();
                 grid.Left = 12;
                 grid.Top = 108;
                 grid.Width = 1240;
-                grid.Height = 565;
+                grid.Height = 430;
                 grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 grid.AllowUserToAddRows = false;
                 grid.AllowUserToDeleteRows = false;
@@ -764,6 +714,32 @@ namespace SolidDNA
                 };
                 grid.EditingControlShowing += GridEditingControlShowing;
                 Controls.Add(grid);
+
+                statusLabel = new Label();
+                statusLabel.Left = 12;
+                statusLabel.Top = 548;
+                statusLabel.Width = 760;
+                statusLabel.Height = 38;
+                statusLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+                Controls.Add(statusLabel);
+
+                Button applyButton = new Button();
+                applyButton.Text = "Apply";
+                applyButton.Left = 880;
+                applyButton.Top = 552;
+                applyButton.Width = 110;
+                applyButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+                applyButton.Click += delegate { ApplyRowsSmart(); };
+                Controls.Add(applyButton);
+
+                Button closeButton = new Button();
+                closeButton.Text = "Close";
+                closeButton.Left = 1000;
+                closeButton.Top = 552;
+                closeButton.Width = 100;
+                closeButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+                closeButton.Click += delegate { Close(); };
+                Controls.Add(closeButton);
             }
 
             private void LoadCutListData()
@@ -967,6 +943,129 @@ namespace SolidDNA
             private string GetSelectedPropertyName()
             {
                 return propertySelector.SelectedItem == null ? string.Empty : propertySelector.SelectedItem.ToString();
+            }
+
+            private void SetSelectedPropertyValueSmart()
+            {
+                RowTargetScope scope = ResolveRowTargetScope("Set Value");
+                if (scope == RowTargetScope.Cancelled)
+                    return;
+                SetSelectedPropertyValue(scope == RowTargetScope.AllRows);
+            }
+
+            private void ClearSelectedColumnSmart()
+            {
+                RowTargetScope scope = ResolveRowTargetScope("Clear Column");
+                if (scope == RowTargetScope.Cancelled)
+                    return;
+                ClearSelectedColumn(scope == RowTargetScope.AllRows);
+            }
+
+            private void ApplyRowsSmart()
+            {
+                RowTargetScope scope = ResolveRowTargetScope("Apply");
+                if (scope == RowTargetScope.Cancelled)
+                    return;
+                ApplyRows(scope == RowTargetScope.AllRows);
+            }
+
+            private RowTargetScope ResolveRowTargetScope(string operationName)
+            {
+                int totalRows = CountRealRows();
+                if (totalRows == 0)
+                    return RowTargetScope.Cancelled;
+
+                int checkedRows = CountCheckedRows();
+
+                // If every row is already checked, Checked Only and All are equivalent.
+                // Do not interrupt the user with a choice dialog in this case.
+                if (checkedRows == totalRows)
+                    return RowTargetScope.CheckedRows;
+
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - " + operationName;
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+                    dialog.ClientSize = new Size(360, 142);
+
+                    Label messageLabel = new Label();
+                    messageLabel.Left = 14;
+                    messageLabel.Top = 14;
+                    messageLabel.Width = 330;
+                    messageLabel.Height = 46;
+                    messageLabel.Text = operationName + " will affect which rows?";
+                    dialog.Controls.Add(messageLabel);
+
+                    RowTargetScope selectedScope = RowTargetScope.Cancelled;
+
+                    Button allButton = new Button();
+                    allButton.Text = "All";
+                    allButton.Left = 18;
+                    allButton.Top = 82;
+                    allButton.Width = 96;
+                    allButton.DialogResult = DialogResult.OK;
+                    allButton.Click += delegate { selectedScope = RowTargetScope.AllRows; };
+                    dialog.Controls.Add(allButton);
+
+                    Button checkedButton = new Button();
+                    checkedButton.Text = "Checked Only";
+                    checkedButton.Left = 126;
+                    checkedButton.Top = 82;
+                    checkedButton.Width = 116;
+                    checkedButton.Enabled = checkedRows > 0;
+                    checkedButton.DialogResult = DialogResult.OK;
+                    checkedButton.Click += delegate { selectedScope = RowTargetScope.CheckedRows; };
+                    dialog.Controls.Add(checkedButton);
+
+                    Button cancelButton = new Button();
+                    cancelButton.Text = "Cancel";
+                    cancelButton.Left = 254;
+                    cancelButton.Top = 82;
+                    cancelButton.Width = 88;
+                    cancelButton.DialogResult = DialogResult.Cancel;
+                    cancelButton.Click += delegate { selectedScope = RowTargetScope.Cancelled; };
+                    dialog.Controls.Add(cancelButton);
+
+                    dialog.AcceptButton = allButton;
+                    dialog.CancelButton = cancelButton;
+
+                    dialog.ShowDialog(this);
+                    return selectedScope;
+                }
+            }
+
+            private int CountRealRows()
+            {
+                int count = 0;
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (!row.IsNewRow)
+                        count++;
+                }
+                return count;
+            }
+
+            private int CountCheckedRows()
+            {
+                int count = 0;
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (!row.IsNewRow && IsRowChecked(row))
+                        count++;
+                }
+                return count;
+            }
+
+            private void ToggleAllApply()
+            {
+                int totalRows = CountRealRows();
+                int checkedRows = CountCheckedRows();
+                bool newValue = !(totalRows > 0 && checkedRows == totalRows);
+                SetAllApply(newValue);
             }
 
             private void SetSelectedPropertyValue(bool allRows)

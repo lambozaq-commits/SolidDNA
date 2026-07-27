@@ -117,7 +117,7 @@ namespace SolidDNA
                 if (namingMode == PdfExportNamingMode.AutomaticFromProperties)
                 {
                     Status =
-                        "Pending property check - click Refresh properties or export to read naming values.";
+                        "Pending property check - click Check Properties or export to read naming values.";
                 }
                 else
                 {
@@ -306,7 +306,19 @@ namespace SolidDNA
         /// </summary>
         public static void ExportActiveDrawingToPdf()
         {
-            ShowAutoNamedBatchExport();
+            ShowBatchPdfExport();
+        }
+
+        public static void ShowBatchPdfExport()
+        {
+            PdfExportNamingMode namingMode;
+
+            if (!TryChoosePdfExportNamingMode(out namingMode))
+            {
+                return;
+            }
+
+            ShowBatchExport(namingMode);
         }
 
         public static void ShowAutoNamedBatchExport()
@@ -319,6 +331,91 @@ namespace SolidDNA
         {
             ShowBatchExport(
                 PdfExportNamingMode.ManualFileNames);
+        }
+
+        private static bool TryChoosePdfExportNamingMode(
+            out PdfExportNamingMode namingMode)
+        {
+            PdfExportNamingMode selectedNamingMode =
+                PdfExportNamingMode.AutomaticFromProperties;
+
+            using (Form dialog = new Form())
+            {
+                dialog.Text = "Cabin Tools - PDF Export";
+                dialog.StartPosition = FormStartPosition.CenterScreen;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                dialog.ShowInTaskbar = false;
+                dialog.ClientSize = new System.Drawing.Size(430, 170);
+
+                Label heading = new Label();
+                heading.Left = 14;
+                heading.Top = 16;
+                heading.Width = 395;
+                heading.Height = 32;
+                heading.Text = "Select PDF naming method";
+                heading.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+                heading.Font = new System.Drawing.Font(
+                    dialog.Font,
+                    System.Drawing.FontStyle.Bold);
+                dialog.Controls.Add(heading);
+
+                Button automaticButton = new Button();
+                automaticButton.Text = "Automatic";
+                automaticButton.Left = 34;
+                automaticButton.Top = 82;
+                automaticButton.Width = 110;
+                automaticButton.DialogResult = DialogResult.OK;
+                automaticButton.Click += delegate
+                {
+                    selectedNamingMode = PdfExportNamingMode.AutomaticFromProperties;
+                };
+                dialog.Controls.Add(automaticButton);
+
+                Button manualButton = new Button();
+                manualButton.Text = "Manual";
+                manualButton.Left = 160;
+                manualButton.Top = 82;
+                manualButton.Width = 110;
+                manualButton.DialogResult = DialogResult.OK;
+                manualButton.Click += delegate
+                {
+                    selectedNamingMode = PdfExportNamingMode.ManualFileNames;
+                };
+                dialog.Controls.Add(manualButton);
+
+                Button cancelButton = new Button();
+                cancelButton.Text = "Cancel";
+                cancelButton.Left = 286;
+                cancelButton.Top = 82;
+                cancelButton.Width = 110;
+                cancelButton.DialogResult = DialogResult.Cancel;
+                dialog.Controls.Add(cancelButton);
+
+                Label hint = new Label();
+                hint.Left = 14;
+                hint.Top = 122;
+                hint.Width = 395;
+                hint.Height = 30;
+                hint.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+                hint.Text = "Automatic uses drawing custom properties. Manual lets you type PDF names.";
+                dialog.Controls.Add(hint);
+
+                dialog.AcceptButton = automaticButton;
+                dialog.CancelButton = cancelButton;
+
+                DialogResult result = dialog.ShowDialog();
+
+                if (result != DialogResult.OK)
+                {
+                    namingMode = PdfExportNamingMode.AutomaticFromProperties;
+                    return false;
+                }
+
+                namingMode = selectedNamingMode;
+                return true;
+            }
         }
 
         internal static string GetActiveSavedDrawingPath(
@@ -366,7 +463,7 @@ namespace SolidDNA
                 item.SourcePath);
 
             // Selecting files must not open them in SOLIDWORKS. Property values
-            // are loaded only on explicit Refresh properties or immediately before
+            // are loaded only on explicit Check Properties or immediately before
             // automatic export.
             item.PropertiesRead = false;
             item.UpdateDisplayStatus(namingMode);
@@ -493,7 +590,7 @@ namespace SolidDNA
             {
                 if (!item.PropertiesRead)
                 {
-                    return "Properties have not been read. Click Refresh properties.";
+                    return "Properties have not been read. Click Check Properties.";
                 }
 
                 if (item.HasMissingNamingProperties)

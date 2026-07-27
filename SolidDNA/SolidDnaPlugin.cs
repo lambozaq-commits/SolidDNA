@@ -113,6 +113,11 @@ namespace SolidDNA
                     resourcesDirectory,
                     "CabinToolsMain{0}.png");
 
+            string shortcutFlyoutIconPathFormat =
+                Path.Combine(
+                    resourcesDirectory,
+                    "CabinToolsShortcut{0}.png");
+
             string propertiesFlyoutIconPathFormat =
                 Path.Combine(
                     resourcesDirectory,
@@ -136,6 +141,7 @@ namespace SolidDNA
             if (!HasCompleteIconSet(
                     commandIconPathFormat,
                     mainIconPathFormat,
+                    shortcutFlyoutIconPathFormat,
                     propertiesFlyoutIconPathFormat,
                     exportFlyoutIconPathFormat,
                     drawingFlyoutIconPathFormat,
@@ -151,6 +157,35 @@ namespace SolidDNA
                         CreateFallbackCommandItems());
 
                 return;
+            }
+
+            // Register the all-features flyout so it is available through
+            // SOLIDWORKS customization and the S-key Shortcut Bar.
+            // Do not add it to the visible Cabin Tools CommandManager tab.
+            CommandManagerFlyout allToolsFlyout =
+                commandManager.CreateFlyoutGroup2(
+                    title: "Cabin Tools",
+                    items: CreateAllToolsCommands(),
+                    mainIconPathFormat:
+                        shortcutFlyoutIconPathFormat,
+                    iconListsPathFormat:
+                        commandIconPathFormat,
+                    tooltip: "Open Cabin Tools",
+                    hint:
+                        "Access Cabin property, export, drawing, and assembly tools from one flyout.",
+                    tabView:
+                        CommandManagerItemTabView
+                            .IconWithTextBelow,
+                    type:
+                        CommandManagerFlyoutType
+                            .ExpandOnly);
+
+            // Keep a local reference so the registration call is intentionally
+            // retained, even though the flyout is not placed on the visible tab.
+            if (allToolsFlyout == null)
+            {
+                WriteStartupWarning(
+                    "Cabin Tools Shortcut Bar flyout was not created.");
             }
 
             CommandManagerFlyout propertiesFlyout =
@@ -207,17 +242,17 @@ namespace SolidDNA
                         CommandManagerFlyoutType
                             .ExpandOnly);
 
-            CommandManagerFlyout utilitiesFlyout =
+            CommandManagerFlyout assemblyFlyout =
                 commandManager.CreateFlyoutGroup2(
-                    title: "Utilities",
-                    items: CreateUtilityCommands(),
+                    title: "Assembly Tools",
+                    items: CreateAssemblyCommands(),
                     mainIconPathFormat:
                         utilitiesFlyoutIconPathFormat,
                     iconListsPathFormat:
                         commandIconPathFormat,
-                    tooltip: "Cabin Tools utilities",
+                    tooltip: "Assembly tools",
                     hint:
-                        "Refresh the Cabin Tools taskpane and verify the add-in connection.",
+                        "Mate assistant and component configuration manager.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -237,7 +272,7 @@ namespace SolidDNA
                         new CommandManagerSeparator(),
                         drawingFlyout,
                         new CommandManagerSeparator(),
-                        utilitiesFlyout
+                        assemblyFlyout
                     },
                 mainIconPathFormat:
                     mainIconPathFormat,
@@ -326,6 +361,25 @@ namespace SolidDNA
             return true;
         }
 
+
+        private static List<CommandManagerItem>
+            CreateAllToolsCommands()
+        {
+            List<CommandManagerItem> items =
+                new List<CommandManagerItem>();
+
+            // Create fresh CommandManagerItem instances for this all-tools
+            // flyout. Do not reuse the same mutable item objects in the
+            // categorized flyouts.
+            items.AddRange(CreatePropertyCommands());
+            items.AddRange(CreateAssemblyCommands());
+            items.AddRange(CreateExportCommands());
+            items.AddRange(CreateDrawingCommands());
+            items.AddRange(CreateUtilityCommands());
+
+            return items;
+        }
+
         private static List<ICommandManagerItem>
             CreateFallbackCommandItems()
         {
@@ -355,7 +409,7 @@ namespace SolidDNA
 
             AddItems(
                 items,
-                CreateUtilityCommands());
+                CreateAssemblyCommands());
 
             return items;
         }
@@ -436,15 +490,22 @@ namespace SolidDNA
                         args.Result =
                             CabinToolsCommandState
                                 .ForPart()
-                },
+                }
+            };
+        }
 
+        private static List<CommandManagerItem>
+            CreateAssemblyCommands()
+        {
+            return new List<CommandManagerItem>
+            {
                 new CommandManagerItem
                 {
                     Name = "Reference Mate Assistant",
                     Tooltip =
-                        "Mate selected component reference geometry to assembly reference geometry and Basic Sketch references.",
+                        "Mate component reference geometry to assembly reference geometry or selected Basic Sketch geometry.",
                     Hint =
-                        "Select one component, browse component planes/sketch lines and assembly Basic Sketch references, then create mates with Create and Continue.",
+                        "Select components/references in SOLIDWORKS or from the assistant, then create the mate.",
                     ImageIndex = 1,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
@@ -460,18 +521,18 @@ namespace SolidDNA
 
                 new CommandManagerItem
                 {
-                    Name = "Wall Panel Configuration Manager",
+                    Name = "Assembly Configuration Manager",
                     Tooltip =
-                        "Change wall panel referenced configurations in bulk while preserving width and length.",
+                        "Change referenced configurations for assembly component instances.",
                     Hint =
-                        "Preview and apply reinforcement-scheme or exact-configuration changes to selected panels, all recognised panels, or selected assembly configurations.",
+                        "Scan assembly components, use SOLIDWORKS selection to check rows, choose target configurations, then apply to active/checked/all assembly configurations.",
                     ImageIndex = 1,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
                     VisibleForParts = true,
                     OnClick =
-                        WallPanelConfigurationManagerCommand
-                            .ShowWallPanelManagerForm,
+                        AssemblyConfigurationManagerCommand
+                            .ShowAssemblyConfigurationManagerForm,
                     OnStateCheck = args =>
                         args.Result =
                             CabinToolsCommandState
@@ -487,38 +548,18 @@ namespace SolidDNA
             {
                 new CommandManagerItem
                 {
-                    Name = "Export PDFs - Auto Name",
+                    Name = "Export PDFs",
                     Tooltip =
-                        "Export one or more drawings to automatically named PDFs.",
+                        "Export one or more drawings to PDF.",
                     Hint =
-                        "Select multiple drawings. PDF names are generated from drawing properties; rows with missing values are marked ! and skipped.",
+                        "Choose Automatic or Manual naming after launching the command. Automatic uses drawing properties; Manual lets you type PDF names.",
                     ImageIndex = 2,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
                     VisibleForParts = true,
                     OnClick =
                         PdfExportCommand
-                            .ShowAutoNamedBatchExport,
-                    OnStateCheck = args =>
-                        args.Result =
-                            CommandManagerItemState
-                                .DeselectedEnabled
-                },
-
-                new CommandManagerItem
-                {
-                    Name = "Export PDFs - Manual Name",
-                    Tooltip =
-                        "Export one or more drawings to manually named PDFs.",
-                    Hint =
-                        "Select multiple drawings, edit each PDF filename, and export checked rows or all valid rows. Missing drawing properties are shown but do not block manual naming.",
-                    ImageIndex = 2,
-                    VisibleForDrawings = true,
-                    VisibleForAssemblies = true,
-                    VisibleForParts = true,
-                    OnClick =
-                        PdfExportCommand
-                            .ShowManualNamedBatchExport,
+                            .ShowBatchPdfExport,
                     OnStateCheck = args =>
                         args.Result =
                             CommandManagerItemState

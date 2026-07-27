@@ -38,13 +38,24 @@ namespace SolidDNA
         private RadioButton individualFoldersModeRadioButton;
         private Label folderModeHintLabel;
         private Button browseBatchFolderButton;
-        private Button applyFolderToCheckedButton;
-        private Button applyFolderToAllButton;
-        private Button useSourceFoldersButton;
-        private Button chooseFolderForSelectedRowsButton;
-        private Button exportCheckedButton;
-        private Button exportAllValidButton;
+        private Button assignFolderButton;
+        private Button exportButton;
         private Label statusLabel;
+
+        private enum PdfRowTargetChoice
+        {
+            Cancel,
+            CheckedOnly,
+            All
+        }
+
+        private enum PdfFolderTargetChoice
+        {
+            Cancel,
+            SelectedRows,
+            CheckedOnly,
+            All
+        }
 
         public IList<PdfBatchExportItem> DrawingItems
         {
@@ -105,7 +116,8 @@ namespace SolidDNA
             root.Dock = DockStyle.Fill;
             root.Padding = new Padding(12);
             root.ColumnCount = 1;
-            root.RowCount = 6;
+            root.RowCount = 7;
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -116,18 +128,19 @@ namespace SolidDNA
             root.Controls.Add(BuildIntroductionPanel(), 0, 0);
             root.Controls.Add(BuildDrawingActionsPanel(), 0, 1);
             root.Controls.Add(BuildOutputAndOptionsPanel(), 0, 2);
+            root.Controls.Add(BuildTableActionsPanel(), 0, 3);
 
             drawingsGrid = BuildDrawingsGrid();
-            root.Controls.Add(drawingsGrid, 0, 3);
+            root.Controls.Add(drawingsGrid, 0, 4);
 
             statusLabel = new Label();
             statusLabel.AutoSize = true;
             statusLabel.Dock = DockStyle.Fill;
             statusLabel.Padding = new Padding(0, 8, 0, 8);
             statusLabel.TextAlign = ContentAlignment.MiddleLeft;
-            root.Controls.Add(statusLabel, 0, 4);
+            root.Controls.Add(statusLabel, 0, 5);
 
-            root.Controls.Add(BuildBottomButtonPanel(), 0, 5);
+            root.Controls.Add(BuildBottomButtonPanel(), 0, 6);
 
             Controls.Add(root);
         }
@@ -143,22 +156,10 @@ namespace SolidDNA
             heading.Font = new Font(Font, FontStyle.Bold);
             heading.Text = namingMode ==
                 PdfExportNamingMode.AutomaticFromProperties
-                ? "Automatic PDF naming from drawing custom properties"
+                ? "Automatic PDF naming"
                 : "Manual PDF naming";
 
-            Label details = new Label();
-            details.AutoSize = true;
-            details.MaximumSize = new Size(1320, 0);
-            details.Top = heading.Bottom + 4;
-            details.Left = 0;
-            details.Text = namingMode ==
-                PdfExportNamingMode.AutomaticFromProperties
-                ? "The automatic filename uses DrwNumber, Revision, Cabin type description, Cabin type defined, and Layout type. Missing values are shown in the Status column as ! text on a red background. Adding drawings does not open them; click Refresh properties or begin export to read their custom properties."
-                : "Enter a PDF filename for each row. The Status column still reports incomplete automatic naming properties when they have been read, but those values do not block manual export.";
-
             panel.Controls.Add(heading);
-            panel.Controls.Add(details);
-
             return panel;
         }
 
@@ -174,37 +175,12 @@ namespace SolidDNA
                 "Add drawings...",
                 AddDrawingsButton_Click);
 
-            Button addActiveDrawingButton = CreateButton(
-                "Add active drawing",
-                AddActiveDrawingButton_Click);
-
-            Button removeSelectedRowsButton = CreateButton(
-                "Remove selected rows",
-                RemoveSelectedRowsButton_Click);
-
-            Button clearListButton = CreateButton(
-                "Clear list",
-                ClearListButton_Click);
-
-            Button refreshPropertiesButton = CreateButton(
-                "Refresh properties",
-                RefreshPropertiesButton_Click);
-
-            Button selectReadyButton = CreateButton(
-                "Select ready rows",
-                SelectReadyButton_Click);
-
-            Button clearExportSelectionButton = CreateButton(
-                "Clear export selection",
-                ClearExportSelectionButton_Click);
+            Button removeDrawingsButton = CreateButton(
+                "Remove drawings",
+                RemoveDrawingsButton_Click);
 
             panel.Controls.Add(addDrawingsButton);
-            panel.Controls.Add(addActiveDrawingButton);
-            panel.Controls.Add(removeSelectedRowsButton);
-            panel.Controls.Add(clearListButton);
-            panel.Controls.Add(refreshPropertiesButton);
-            panel.Controls.Add(selectReadyButton);
-            panel.Controls.Add(clearExportSelectionButton);
+            panel.Controls.Add(removeDrawingsButton);
 
             return panel;
         }
@@ -221,7 +197,7 @@ namespace SolidDNA
             layout.Dock = DockStyle.Fill;
             layout.AutoSize = true;
             layout.ColumnCount = 6;
-            layout.RowCount = 5;
+            layout.RowCount = 6;
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -263,24 +239,14 @@ namespace SolidDNA
                 "Browse...",
                 BrowseFolderButton_Click);
 
-            applyFolderToCheckedButton = CreateButton(
-                "Apply to checked",
-                ApplyFolderToCheckedButton_Click);
-
-            applyFolderToAllButton = CreateButton(
-                "Apply to all",
-                ApplyFolderToAllButton_Click);
-
-            useSourceFoldersButton = CreateButton(
-                "Use source folders",
-                UseSourceFoldersButton_Click);
+            assignFolderButton = CreateButton(
+                "Assign folder...",
+                AssignFolderButton_Click);
 
             layout.Controls.Add(outputFolderLabel, 0, 1);
             layout.Controls.Add(batchOutputFolderTextBox, 1, 1);
             layout.Controls.Add(browseBatchFolderButton, 2, 1);
-            layout.Controls.Add(applyFolderToCheckedButton, 3, 1);
-            layout.Controls.Add(applyFolderToAllButton, 4, 1);
-            layout.Controls.Add(useSourceFoldersButton, 5, 1);
+            layout.Controls.Add(assignFolderButton, 3, 1);
 
             Label individualFolderLabel = new Label();
             individualFolderLabel.Text = "Individual folders:";
@@ -291,14 +257,8 @@ namespace SolidDNA
             folderModeHintLabel.AutoSize = true;
             folderModeHintLabel.Anchor = AnchorStyles.Left;
 
-            chooseFolderForSelectedRowsButton = CreateButton(
-                "Choose folder for selected row(s)...",
-                ChooseFolderForSelectedRowsButton_Click);
-
             layout.Controls.Add(individualFolderLabel, 0, 2);
             layout.Controls.Add(folderModeHintLabel, 1, 2);
-            layout.SetColumnSpan(chooseFolderForSelectedRowsButton, 3);
-            layout.Controls.Add(chooseFolderForSelectedRowsButton, 3, 2);
 
             Label existingLabel = new Label();
             existingLabel.Text = "Existing PDFs:";
@@ -312,16 +272,8 @@ namespace SolidDNA
             existingPdfBehaviorComboBox.Items.Add("Overwrite existing PDFs");
             existingPdfBehaviorComboBox.SelectedIndex = 0;
 
-            leaveDrawingsOpenCheckBox = new CheckBox();
-            leaveDrawingsOpenCheckBox.AutoSize = true;
-            leaveDrawingsOpenCheckBox.Text =
-                "Leave drawings opened by Cabin Tools open in SOLIDWORKS after export";
-            leaveDrawingsOpenCheckBox.CheckedChanged += ExportPreferenceControl_Changed;
-
             layout.Controls.Add(existingLabel, 0, 3);
             layout.Controls.Add(existingPdfBehaviorComboBox, 1, 3);
-            layout.SetColumnSpan(leaveDrawingsOpenCheckBox, 4);
-            layout.Controls.Add(leaveDrawingsOpenCheckBox, 2, 3);
 
             openPdfAfterExportCheckBox = new CheckBox();
             openPdfAfterExportCheckBox.AutoSize = true;
@@ -331,9 +283,51 @@ namespace SolidDNA
             layout.SetColumnSpan(openPdfAfterExportCheckBox, 5);
             layout.Controls.Add(openPdfAfterExportCheckBox, 1, 4);
 
+            leaveDrawingsOpenCheckBox = new CheckBox();
+            leaveDrawingsOpenCheckBox.AutoSize = true;
+            leaveDrawingsOpenCheckBox.Text =
+                "Keep drawings open after export";
+            leaveDrawingsOpenCheckBox.CheckedChanged += ExportPreferenceControl_Changed;
+
+            layout.SetColumnSpan(leaveDrawingsOpenCheckBox, 5);
+            layout.Controls.Add(leaveDrawingsOpenCheckBox, 1, 5);
+
             group.Controls.Add(layout);
 
             return group;
+        }
+
+        private Control BuildTableActionsPanel()
+        {
+            TableLayoutPanel outer = new TableLayoutPanel();
+            outer.Dock = DockStyle.Top;
+            outer.AutoSize = true;
+            outer.ColumnCount = 3;
+            outer.RowCount = 1;
+            outer.Margin = new Padding(0, 2, 0, 2);
+            outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            outer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+
+            FlowLayoutPanel panel = new FlowLayoutPanel();
+            panel.AutoSize = true;
+            panel.WrapContents = false;
+            panel.FlowDirection = FlowDirection.LeftToRight;
+            panel.Margin = new Padding(0, 0, 0, 0);
+
+            Button checkPropertiesButton = CreateButton(
+                "Check Properties",
+                RefreshPropertiesButton_Click);
+
+            Button selectReadyButton = CreateButton(
+                "Select ready rows",
+                SelectReadyButton_Click);
+
+            panel.Controls.Add(checkPropertiesButton);
+            panel.Controls.Add(selectReadyButton);
+            outer.Controls.Add(panel, 1, 0);
+
+            return outer;
         }
 
         private DataGridView BuildDrawingsGrid()
@@ -430,19 +424,12 @@ namespace SolidDNA
             Button cancelButton = CreateButton("Cancel", null);
             cancelButton.DialogResult = DialogResult.Cancel;
 
-            exportAllValidButton = CreateButton(
-                namingMode == PdfExportNamingMode.AutomaticFromProperties
-                    ? "Export all ready"
-                    : "Export all valid names",
-                ExportAllValidButton_Click);
-
-            exportCheckedButton = CreateButton(
-                "Export checked",
-                ExportCheckedButton_Click);
+            exportButton = CreateButton(
+                "Export...",
+                ExportButton_Click);
 
             panel.Controls.Add(cancelButton);
-            panel.Controls.Add(exportAllValidButton);
-            panel.Controls.Add(exportCheckedButton);
+            panel.Controls.Add(exportButton);
 
             CancelButton = cancelButton;
 
@@ -532,6 +519,37 @@ namespace SolidDNA
                 }
             }
 
+            UpdateFormStatus();
+        }
+
+        private void RemoveDrawingsButton_Click(object sender, EventArgs e)
+        {
+            List<PdfBatchExportItem> selectedItems = GetSelectedGridItems();
+
+            if (selectedItems.Count > 0)
+            {
+                foreach (PdfBatchExportItem item in selectedItems)
+                {
+                    drawingItems.Remove(item);
+                }
+
+                UpdateFormStatus();
+                return;
+            }
+
+            if (drawingItems.Count == 0)
+                return;
+
+            DialogResult response = MessageBox.Show(
+                "No rows are selected. Remove all drawings from this PDF export list?",
+                "Cabin Tools",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (response != DialogResult.Yes)
+                return;
+
+            drawingItems.Clear();
             UpdateFormStatus();
         }
 
@@ -657,6 +675,73 @@ namespace SolidDNA
             SetFolderActionHighlight(true);
         }
 
+        private void AssignFolderButton_Click(object sender, EventArgs e)
+        {
+            if (drawingItems.Count == 0)
+            {
+                MessageBox.Show(
+                    "Add at least one drawing first.",
+                    "Cabin Tools",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            PdfFolderTargetChoice targetChoice = ResolveFolderTargetChoice();
+            if (targetChoice == PdfFolderTargetChoice.Cancel)
+                return;
+
+            List<PdfBatchExportItem> targetItems = GetFolderTargetItems(targetChoice);
+            if (targetItems.Count == 0)
+            {
+                MessageBox.Show(
+                    "No matching rows found for that choice.",
+                    "Cabin Tools",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            string initialFolder = batchOutputFolderTextBox.Text.Trim();
+            if (targetItems.Count > 0 && !string.IsNullOrWhiteSpace(targetItems[0].OutputFolder))
+                initialFolder = targetItems[0].OutputFolder;
+
+            string folder;
+            if (FolderMode == PdfOutputFolderMode.CommonFolder)
+            {
+                folder = batchOutputFolderTextBox.Text.Trim();
+                if (!Directory.Exists(folder))
+                {
+                    folder = ShowFolderDialog(
+                        "Select one common PDF output folder",
+                        initialFolder);
+                    if (string.IsNullOrWhiteSpace(folder))
+                        return;
+                    batchOutputFolderTextBox.Text = folder;
+                }
+            }
+            else
+            {
+                folder = ShowFolderDialog(
+                    "Select PDF output folder",
+                    initialFolder);
+                if (string.IsNullOrWhiteSpace(folder))
+                    return;
+            }
+
+            foreach (PdfBatchExportItem item in targetItems)
+            {
+                item.OutputFolder = folder;
+                item.UpdateDisplayStatus(namingMode);
+            }
+
+            userPreferences.LastBatchOutputFolder = folder;
+            SaveUserPreferences();
+            SetFolderActionHighlight(false);
+            drawingsGrid.Refresh();
+            UpdateFormStatus();
+        }
+
         private void ApplyFolderToCheckedButton_Click(object sender, EventArgs e)
         {
             int checkedCount = 0;
@@ -742,6 +827,17 @@ namespace SolidDNA
             SetFolderActionHighlight(false);
             drawingsGrid.Refresh();
             UpdateFormStatus();
+        }
+
+        private void ExportButton_Click(object sender, EventArgs e)
+        {
+            PdfRowTargetChoice choice = ResolveExportTargetChoice();
+            if (choice == PdfRowTargetChoice.Cancel)
+                return;
+
+            BeginExport(choice == PdfRowTargetChoice.All
+                ? PdfBatchExportScope.AllValidRows
+                : PdfBatchExportScope.CheckedRows);
         }
 
         private void ExportCheckedButton_Click(object sender, EventArgs e)
@@ -1156,10 +1252,8 @@ namespace SolidDNA
 
             batchOutputFolderTextBox.Enabled = commonMode;
             browseBatchFolderButton.Enabled = commonMode;
-            applyFolderToCheckedButton.Enabled = commonMode;
-            applyFolderToAllButton.Enabled = commonMode;
-            useSourceFoldersButton.Enabled = true;
-            chooseFolderForSelectedRowsButton.Enabled = !commonMode;
+            if (assignFolderButton != null)
+                assignFolderButton.Enabled = drawingItems.Count > 0;
 
             if (outputFolderColumn != null)
             {
@@ -1167,8 +1261,8 @@ namespace SolidDNA
             }
 
             folderModeHintLabel.Text = commonMode
-                ? "Select a folder, then apply it to checked rows or all rows."
-                : "Select row(s), then choose a folder. You can also type a folder path directly in the Output folder column.";
+                ? "Use Assign folder... to apply the common folder to all or selected rows."
+                : "Use Assign folder... to choose a folder for all or selected rows.";
 
             userPreferences.FolderMode = FolderMode;
             SaveUserPreferences();
@@ -1183,14 +1277,8 @@ namespace SolidDNA
                 ? Color.Khaki
                 : SystemColors.Control;
 
-            if (applyFolderToCheckedButton != null)
-                applyFolderToCheckedButton.BackColor = actionColor;
-
-            if (applyFolderToAllButton != null)
-                applyFolderToAllButton.BackColor = actionColor;
-
-            if (useSourceFoldersButton != null)
-                useSourceFoldersButton.BackColor = actionColor;
+            if (assignFolderButton != null)
+                assignFolderButton.BackColor = actionColor;
         }
 
         private void UpdateFormStatus()
@@ -1199,14 +1287,10 @@ namespace SolidDNA
             int ready = 0;
             int attention = 0;
             int pendingProperties = 0;
-            int checkedRows = 0;
 
             foreach (PdfBatchExportItem item in drawingItems)
             {
                 item.UpdateDisplayStatus(namingMode);
-
-                if (item.SelectedForExport)
-                    checkedRows++;
 
                 if (!item.PropertiesRead &&
                     namingMode == PdfExportNamingMode.AutomaticFromProperties)
@@ -1230,22 +1314,184 @@ namespace SolidDNA
 
             if (total == 0)
             {
-                statusLabel.Text =
-                    "No drawings selected. Add drawings... supports multi-selection and does not open drawings. The source drawings are never saved by this tool.";
+                statusLabel.Text = "No drawings selected.";
             }
             else
             {
                 statusLabel.Text =
-                    "Drawings: " + total.ToString() +
-                    " | Ready: " + ready.ToString() +
-                    " | Needs attention: " + attention.ToString() +
-                    " | Pending property read: " + pendingProperties.ToString() +
-                    " | Checked for export: " + checkedRows.ToString() +
-                    "\r\nStatus beginning with ! is highlighted red. Automatic export skips missing naming properties. PDF creation still requires SOLIDWORKS to load the drawing internally, but Cabin Tools opens selected files silently, hides them, and closes them unless Leave drawings open is selected.";
+                    total.ToString() + " drawing(s): " +
+                    ready.ToString() + " ready, " +
+                    attention.ToString() + " need attention" +
+                    (pendingProperties > 0
+                        ? ", " + pendingProperties.ToString() + " pending property check."
+                        : ".");
             }
 
-            exportCheckedButton.Enabled = total > 0;
-            exportAllValidButton.Enabled = total > 0;
+            if (assignFolderButton != null)
+                assignFolderButton.Enabled = total > 0;
+
+            if (exportButton != null)
+                exportButton.Enabled = total > 0;
+        }
+
+        private PdfFolderTargetChoice ResolveFolderTargetChoice()
+        {
+            int checkedRows = CountCheckedItems();
+            int totalRows = drawingItems.Count;
+
+            if (totalRows == 0)
+                return PdfFolderTargetChoice.Cancel;
+
+            using (Form dialog = new Form())
+            {
+                dialog.Text = "Cabin Tools - Assign Folder";
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                dialog.ShowInTaskbar = false;
+                dialog.ClientSize = new Size(390, 130);
+
+                Label label = new Label();
+                label.Left = 12;
+                label.Top = 16;
+                label.Width = 360;
+                label.Height = 34;
+                label.Text = "Assign Output Folder to";
+                label.TextAlign = ContentAlignment.MiddleCenter;
+                label.Font = new Font(dialog.Font, FontStyle.Bold);
+                dialog.Controls.Add(label);
+
+                PdfFolderTargetChoice choice = PdfFolderTargetChoice.Cancel;
+
+                Button allButton = new Button();
+                allButton.Text = "All";
+                allButton.Left = 38;
+                allButton.Top = 74;
+                allButton.Width = 92;
+                allButton.DialogResult = DialogResult.OK;
+                allButton.Click += delegate { choice = PdfFolderTargetChoice.All; };
+                dialog.Controls.Add(allButton);
+
+                Button selectedButton = new Button();
+                selectedButton.Text = "Selected Rows";
+                selectedButton.Left = 146;
+                selectedButton.Top = 74;
+                selectedButton.Width = 116;
+                selectedButton.Enabled = checkedRows > 0;
+                selectedButton.DialogResult = DialogResult.OK;
+                selectedButton.Click += delegate { choice = PdfFolderTargetChoice.CheckedOnly; };
+                dialog.Controls.Add(selectedButton);
+
+                Button cancelButton = new Button();
+                cancelButton.Text = "Cancel";
+                cancelButton.Left = 278;
+                cancelButton.Top = 74;
+                cancelButton.Width = 82;
+                cancelButton.DialogResult = DialogResult.Cancel;
+                cancelButton.Click += delegate { choice = PdfFolderTargetChoice.Cancel; };
+                dialog.Controls.Add(cancelButton);
+
+                dialog.AcceptButton = checkedRows > 0 ? selectedButton : allButton;
+                dialog.CancelButton = cancelButton;
+                dialog.ShowDialog(this);
+                return choice;
+            }
+        }
+
+        private PdfRowTargetChoice ResolveExportTargetChoice()
+        {
+            int totalRows = drawingItems.Count;
+            if (totalRows == 0)
+                return PdfRowTargetChoice.Cancel;
+
+            int checkedRows = CountCheckedItems();
+            if (checkedRows == totalRows)
+                return PdfRowTargetChoice.CheckedOnly;
+
+            using (Form dialog = new Form())
+            {
+                dialog.Text = "Cabin Tools - Export";
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                dialog.ShowInTaskbar = false;
+                dialog.ClientSize = new Size(390, 130);
+
+                Label label = new Label();
+                label.Left = 12;
+                label.Top = 16;
+                label.Width = 360;
+                label.Height = 34;
+                label.Text = "Export PDF Drawings";
+                label.TextAlign = ContentAlignment.MiddleCenter;
+                label.Font = new Font(dialog.Font, FontStyle.Bold);
+                dialog.Controls.Add(label);
+
+                PdfRowTargetChoice choice = PdfRowTargetChoice.Cancel;
+
+                Button allButton = new Button();
+                allButton.Text = "All Ready";
+                allButton.Left = 38;
+                allButton.Top = 74;
+                allButton.Width = 92;
+                allButton.DialogResult = DialogResult.OK;
+                allButton.Click += delegate { choice = PdfRowTargetChoice.All; };
+                dialog.Controls.Add(allButton);
+
+                Button selectedButton = new Button();
+                selectedButton.Text = "Selected Rows";
+                selectedButton.Left = 146;
+                selectedButton.Top = 74;
+                selectedButton.Width = 116;
+                selectedButton.Enabled = checkedRows > 0;
+                selectedButton.DialogResult = DialogResult.OK;
+                selectedButton.Click += delegate { choice = PdfRowTargetChoice.CheckedOnly; };
+                dialog.Controls.Add(selectedButton);
+
+                Button cancelButton = new Button();
+                cancelButton.Text = "Cancel";
+                cancelButton.Left = 278;
+                cancelButton.Top = 74;
+                cancelButton.Width = 82;
+                cancelButton.DialogResult = DialogResult.Cancel;
+                cancelButton.Click += delegate { choice = PdfRowTargetChoice.Cancel; };
+                dialog.Controls.Add(cancelButton);
+
+                dialog.AcceptButton = checkedRows > 0 ? selectedButton : allButton;
+                dialog.CancelButton = cancelButton;
+                dialog.ShowDialog(this);
+                return choice;
+            }
+        }
+
+        private List<PdfBatchExportItem> GetFolderTargetItems(PdfFolderTargetChoice choice)
+        {
+            if (choice == PdfFolderTargetChoice.SelectedRows)
+                return GetSelectedGridItems();
+
+            List<PdfBatchExportItem> items = new List<PdfBatchExportItem>();
+            foreach (PdfBatchExportItem item in drawingItems)
+            {
+                if (choice == PdfFolderTargetChoice.All ||
+                    (choice == PdfFolderTargetChoice.CheckedOnly && item.SelectedForExport))
+                {
+                    items.Add(item);
+                }
+            }
+            return items;
+        }
+
+        private int CountCheckedItems()
+        {
+            int count = 0;
+            foreach (PdfBatchExportItem item in drawingItems)
+            {
+                if (item.SelectedForExport)
+                    count++;
+            }
+            return count;
         }
 
         private List<PdfBatchExportItem> GetSelectedGridItems()

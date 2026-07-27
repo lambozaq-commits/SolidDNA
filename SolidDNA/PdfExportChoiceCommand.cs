@@ -4,8 +4,8 @@ using System.Windows.Forms;
 namespace SolidDNA
 {
     /// <summary>
-    /// Opens a keyboard-friendly selector for the existing automatic-name
-    /// and manual-name PDF export workflows.
+    /// Keyboard-friendly selector for the existing automatic-name and
+    /// manual-name PDF export commands.
     /// </summary>
     internal static class PdfExportChoiceCommand
     {
@@ -21,7 +21,6 @@ namespace SolidDNA
                 {
                     PdfExportCommand
                         .ShowAutoNamedBatchExport();
-
                     return;
                 }
 
