@@ -212,7 +212,7 @@ namespace SolidDNA
                 grid.Columns.Add(applyColumn);
 
                 DataGridViewTextBoxColumn instanceColumn = new DataGridViewTextBoxColumn();
-                instanceColumn.HeaderText = "Component instance";
+                instanceColumn.HeaderText = "Component";
                 instanceColumn.ReadOnly = true;
                 instanceColumn.Width = 220;
                 grid.Columns.Add(instanceColumn);
@@ -292,7 +292,7 @@ namespace SolidDNA
                 }
 
                 object componentsObject = null;
-                try { componentsObject = assemblyDoc.GetComponents(false); } catch { componentsObject = null; }
+                try { componentsObject = assemblyDoc.GetComponents(true); } catch { componentsObject = null; }
 
                 object[] componentObjects = componentsObject as object[];
                 if (componentObjects == null)
@@ -324,15 +324,23 @@ namespace SolidDNA
                     updatingGridInternally = false;
                 }
 
-                SetStatus("Scanned " + rows.Count.ToString() + " component instance(s). Similar components are grouped by referenced file. Select rows or SOLIDWORKS components, then set target configuration.");
+                SetStatus("Scanned " + rows.Count.ToString() + " top-level component(s). Component names match the SOLIDWORKS FeatureManager style: component name, component description, and configuration name.");
             }
 
             private static int CompareRowsForGrouping(ComponentConfigRow a, ComponentConfigRow b)
             {
-                int byFile = string.Compare(a.FileName, b.FileName, StringComparison.OrdinalIgnoreCase);
-                if (byFile != 0)
-                    return byFile;
-                return string.Compare(a.InstanceName, b.InstanceName, StringComparison.OrdinalIgnoreCase);
+                if (a == null && b == null)
+                    return 0;
+                if (a == null)
+                    return -1;
+                if (b == null)
+                    return 1;
+
+                int byInstance = string.Compare(a.InstanceName, b.InstanceName, StringComparison.OrdinalIgnoreCase);
+                if (byInstance != 0)
+                    return byInstance;
+
+                return string.Compare(a.CurrentConfiguration, b.CurrentConfiguration, StringComparison.OrdinalIgnoreCase);
             }
 
             private ComponentConfigRow BuildRow(IComponent2 component)
@@ -376,7 +384,7 @@ namespace SolidDNA
                 gridRow.Tag = row;
 
                 gridRow.Cells[ApplyColumnIndex].Value = row.Apply;
-                gridRow.Cells[InstanceColumnIndex].Value = row.InstanceName;
+                gridRow.Cells[InstanceColumnIndex].Value = BuildFeatureTreeLikeComponentName(row);
                 gridRow.Cells[CurrentConfigColumnIndex].Value = row.CurrentConfiguration;
                 gridRow.Cells[AvailableConfigColumnIndex].Value = BuildAvailableSummary(row.ConfigurationNames);
                 gridRow.Cells[StatusColumnIndex].Value = row.Status;
@@ -400,14 +408,37 @@ namespace SolidDNA
                     return string.Empty;
 
                 List<string> lines = new List<string>();
+                if (!string.IsNullOrWhiteSpace(row.InstanceName))
+                    lines.Add("Component name: " + row.InstanceName);
                 if (!string.IsNullOrWhiteSpace(row.Description))
-                    lines.Add("Description: " + row.Description);
+                    lines.Add("Component description: " + row.Description);
                 if (!string.IsNullOrWhiteSpace(row.FileName))
                     lines.Add("File: " + row.FileName);
                 if (!string.IsNullOrWhiteSpace(row.Path))
                     lines.Add(row.Path);
 
                 return string.Join("\r\n", lines.ToArray());
+            }
+
+            private static string BuildFeatureTreeLikeComponentName(ComponentConfigRow row)
+            {
+                if (row == null)
+                    return string.Empty;
+
+                string primary = string.IsNullOrWhiteSpace(row.InstanceName) ? "<component>" : row.InstanceName.Trim();
+                string description = string.IsNullOrWhiteSpace(row.Description) ? string.Empty : row.Description.Trim();
+                string configuration = string.IsNullOrWhiteSpace(row.CurrentConfiguration) ? string.Empty : row.CurrentConfiguration.Trim();
+
+                if (!string.IsNullOrWhiteSpace(description) && !string.IsNullOrWhiteSpace(configuration))
+                    return primary + " ('" + description + "' " + configuration + ")";
+
+                if (!string.IsNullOrWhiteSpace(description))
+                    return primary + " ('" + description + "')";
+
+                if (!string.IsNullOrWhiteSpace(configuration))
+                    return primary + " (" + configuration + ")";
+
+                return primary;
             }
 
             private static string BuildAvailableSummary(List<string> names)
@@ -466,26 +497,40 @@ namespace SolidDNA
 
             private void ToggleAllChecks()
             {
-                if (rows.Count == 0)
+                List<DataGridViewRow> targetGridRows = GetSelectedGridRows();
+                bool usingSelection = targetGridRows.Count > 1;
+
+                if (!usingSelection)
+                {
+                    targetGridRows = new List<DataGridViewRow>();
+                    foreach (DataGridViewRow gridRow in grid.Rows)
+                    {
+                        if (!gridRow.IsNewRow && gridRow.Tag is ComponentConfigRow)
+                            targetGridRows.Add(gridRow);
+                    }
+                }
+
+                if (targetGridRows.Count == 0)
                     return;
 
                 CaptureUndo("Before check toggle");
 
-                bool allChecked = true;
-                foreach (ComponentConfigRow row in rows)
+                bool allTargetRowsChecked = true;
+                foreach (DataGridViewRow gridRow in targetGridRows)
                 {
-                    if (!row.Apply)
+                    ComponentConfigRow row = gridRow.Tag as ComponentConfigRow;
+                    if (row == null || !row.Apply)
                     {
-                        allChecked = false;
+                        allTargetRowsChecked = false;
                         break;
                     }
                 }
 
-                bool newValue = !allChecked;
+                bool newValue = !allTargetRowsChecked;
                 updatingGridInternally = true;
                 try
                 {
-                    foreach (DataGridViewRow gridRow in grid.Rows)
+                    foreach (DataGridViewRow gridRow in targetGridRows)
                     {
                         ComponentConfigRow row = gridRow.Tag as ComponentConfigRow;
                         if (row == null)
@@ -500,7 +545,36 @@ namespace SolidDNA
                     updatingGridInternally = false;
                 }
 
-                SetStatus(newValue ? "All rows checked." : "All rows unchecked.");
+                string scopeText = usingSelection ? "selected row(s)" : "all rows";
+                SetStatus((newValue ? "Checked " : "Unchecked ") + targetGridRows.Count.ToString() + " " + scopeText + ".");
+            }
+
+            private List<DataGridViewRow> GetSelectedGridRows()
+            {
+                List<DataGridViewRow> selectedRows = new List<DataGridViewRow>();
+
+                if (grid == null)
+                    return selectedRows;
+
+                foreach (DataGridViewRow row in grid.SelectedRows)
+                {
+                    if (row == null || row.IsNewRow || selectedRows.Contains(row))
+                        continue;
+                    selectedRows.Add(row);
+                }
+
+                foreach (DataGridViewCell cell in grid.SelectedCells)
+                {
+                    if (cell == null || cell.RowIndex < 0 || cell.RowIndex >= grid.Rows.Count)
+                        continue;
+
+                    DataGridViewRow row = grid.Rows[cell.RowIndex];
+                    if (row == null || row.IsNewRow || selectedRows.Contains(row))
+                        continue;
+                    selectedRows.Add(row);
+                }
+
+                return selectedRows;
             }
 
             private void SetTargetForSelectedOrCheckedRows()
@@ -942,7 +1016,7 @@ namespace SolidDNA
                     return map;
 
                 object componentsObject = null;
-                try { componentsObject = assemblyDoc.GetComponents(false); } catch { componentsObject = null; }
+                try { componentsObject = assemblyDoc.GetComponents(true); } catch { componentsObject = null; }
                 object[] componentObjects = componentsObject as object[];
                 if (componentObjects == null)
                     return map;
@@ -1354,6 +1428,17 @@ namespace SolidDNA
                 try { return component.GetPathName() ?? string.Empty; } catch { return string.Empty; }
             }
 
+            private static string GetTopLevelComponentName(IComponent2 component)
+            {
+                string name = SafeComponentName(component);
+                if (string.IsNullOrWhiteSpace(name))
+                    return string.Empty;
+                int slash = name.IndexOf('/');
+                if (slash > 0)
+                    return name.Substring(0, slash);
+                return name;
+            }
+
             private static string SafeReferencedConfiguration(IComponent2 component)
             {
                 if (component == null)
@@ -1381,7 +1466,13 @@ namespace SolidDNA
             {
                 List<string> keys = new List<string>();
                 foreach (IComponent2 component in GetSelectedComponents(model))
-                    AddUnique(keys, SafeComponentName(component) + "|" + SafeComponentPath(component));
+                {
+                    string topLevelName = GetTopLevelComponentName(component);
+                    string path = SafeComponentPath(component);
+                    if (!string.IsNullOrWhiteSpace(topLevelName))
+                        AddUnique(keys, topLevelName + "|" + path);
+                    AddUnique(keys, SafeComponentName(component) + "|" + path);
+                }
                 return keys;
             }
 

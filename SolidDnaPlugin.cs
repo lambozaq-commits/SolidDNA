@@ -170,9 +170,9 @@ namespace SolidDNA
                         shortcutFlyoutIconPathFormat,
                     iconListsPathFormat:
                         commandIconPathFormat,
-                    tooltip: "Open Cabin Tools",
+                    tooltip: "Cabin Tools",
                     hint:
-                        "Access Cabin property, export, drawing, and assembly tools from one flyout.",
+                        "One Shortcut Bar dropdown containing Cabin property, export, drawing, and assembly tools.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -368,14 +368,18 @@ namespace SolidDNA
             List<CommandManagerItem> items =
                 new List<CommandManagerItem>();
 
-            // Create fresh CommandManagerItem instances for this all-tools
-            // flyout. Do not reuse the same mutable item objects in the
-            // categorized flyouts.
+            // This list is the single flyout intended for the S-key Shortcut Bar.
+            // Keep it as one clean command list, not as separate Properties /
+            // Export / Drawing / Assembly flyouts. Utilities are deliberately
+            // excluded so the shortcut popup contains actual work features only.
+            //
+            // Important: These are fresh CommandManagerItem instances. Do not
+            // reuse the same mutable objects in the categorized CommandManager
+            // tab flyouts.
             items.AddRange(CreatePropertyCommands());
-            items.AddRange(CreateAssemblyCommands());
             items.AddRange(CreateExportCommands());
             items.AddRange(CreateDrawingCommands());
-            items.AddRange(CreateUtilityCommands());
+            items.AddRange(CreateAssemblyCommands());
 
             return items;
         }

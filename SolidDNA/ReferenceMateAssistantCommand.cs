@@ -101,12 +101,11 @@ namespace SolidDNA
             public string InstanceName = string.Empty;
             public string FileName = string.Empty;
             public string Description = string.Empty;
+            public string ConfigurationName = string.Empty;
 
             public override string ToString()
             {
-                if (string.IsNullOrWhiteSpace(Description))
-                    return InstanceName;
-                return InstanceName + " — " + Description;
+                return BuildFeatureTreeLikeName(InstanceName, Description, ConfigurationName);
             }
         }
 
@@ -350,7 +349,7 @@ namespace SolidDNA
                 componentChoices.Clear();
 
                 object componentsObject = null;
-                try { componentsObject = assemblyDoc.GetComponents(false); } catch { componentsObject = null; }
+                try { componentsObject = assemblyDoc.GetComponents(true); } catch { componentsObject = null; }
                 object[] componentObjects = componentsObject as object[];
                 if (componentObjects != null)
                 {
@@ -365,6 +364,7 @@ namespace SolidDNA
                         descriptor.InstanceName = SafeComponentName(component);
                         string path = SafeComponentPath(component);
                         descriptor.FileName = string.IsNullOrWhiteSpace(path) ? descriptor.InstanceName : Path.GetFileName(path);
+                        descriptor.ConfigurationName = SafeReferencedConfiguration(component);
                         descriptor.Description = ReadComponentDescription(component);
                         if (string.IsNullOrWhiteSpace(descriptor.Description))
                             descriptor.Description = descriptor.FileName;
@@ -378,10 +378,18 @@ namespace SolidDNA
 
             private static int CompareComponentDescriptors(ComponentDescriptor a, ComponentDescriptor b)
             {
-                int byFile = string.Compare(a.FileName, b.FileName, StringComparison.OrdinalIgnoreCase);
-                if (byFile != 0)
-                    return byFile;
-                return string.Compare(a.InstanceName, b.InstanceName, StringComparison.OrdinalIgnoreCase);
+                if (a == null && b == null)
+                    return 0;
+                if (a == null)
+                    return -1;
+                if (b == null)
+                    return 1;
+
+                int byName = string.Compare(a.InstanceName, b.InstanceName, StringComparison.OrdinalIgnoreCase);
+                if (byName != 0)
+                    return byName;
+
+                return string.Compare(a.ConfigurationName, b.ConfigurationName, StringComparison.OrdinalIgnoreCase);
             }
 
             private void FillComponentBoxes()
@@ -495,7 +503,7 @@ namespace SolidDNA
                 if (component == null || box == null)
                     return;
 
-                EnsureComponentInChoices(component);
+                string wantedTopLevelName = GetTopLevelComponentName(component);
 
                 for (int i = 0; i < box.Items.Count; i++)
                 {
@@ -503,7 +511,7 @@ namespace SolidDNA
                     if (descriptor == null)
                         continue;
 
-                    if (ComponentsMatch(descriptor.Component, component))
+                    if (ComponentsMatch(descriptor.Component, component) || string.Equals(SafeComponentName(descriptor.Component), wantedTopLevelName, StringComparison.OrdinalIgnoreCase))
                     {
                         box.SelectedIndex = i;
                         return;
@@ -518,7 +526,7 @@ namespace SolidDNA
                     if (descriptor == null)
                         continue;
 
-                    if (ComponentsMatch(descriptor.Component, component))
+                    if (ComponentsMatch(descriptor.Component, component) || string.Equals(SafeComponentName(descriptor.Component), wantedTopLevelName, StringComparison.OrdinalIgnoreCase))
                     {
                         box.SelectedIndex = i;
                         return;
@@ -545,6 +553,7 @@ namespace SolidDNA
                 descriptor.InstanceName = SafeComponentName(component);
                 string path = SafeComponentPath(component);
                 descriptor.FileName = string.IsNullOrWhiteSpace(path) ? descriptor.InstanceName : Path.GetFileName(path);
+                descriptor.ConfigurationName = SafeReferencedConfiguration(component);
                 descriptor.Description = ReadComponentDescription(component);
                 if (string.IsNullOrWhiteSpace(descriptor.Description))
                     descriptor.Description = descriptor.FileName;
@@ -569,7 +578,7 @@ namespace SolidDNA
                 FillCombo(component2ReferenceBox, component2References);
                 FillCombo(assemblyReferenceBox, assemblyReferences);
 
-                statusLabel.Text = "Loaded " + componentChoices.Count + " component instance(s), " + component1References.Count + " component-1 reference(s), " + component2References.Count + " component-2 reference(s), and " + assemblyReferences.Count + " assembly reference(s). Component reference dropdowns load resolved component reference planes/geometry automatically. Sketch lines can still be selected directly in SOLIDWORKS and loaded with Use selected.";
+                statusLabel.Text = "Loaded " + componentChoices.Count + " top-level component(s), " + component1References.Count + " component-1 plane(s), " + component2References.Count + " component-2 plane(s), and " + assemblyReferences.Count + " assembly reference(s). Component names match the SOLIDWORKS FeatureManager style: component name, component description, and configuration name.";
             }
 
             private static void FillCombo(ComboBox combo, List<ReferenceDescriptor> refs)
@@ -636,7 +645,8 @@ namespace SolidDNA
                 if (string.Equals(targetName, "Component 1", StringComparison.OrdinalIgnoreCase) && selectedReference.OwnerComponent != null)
                 {
                     SelectComponentInCombo(component1Box, selectedReference.OwnerComponent, false);
-                    component1 = selectedReference.OwnerComponent;
+                    ComponentDescriptor selectedDescriptor = component1Box.SelectedItem as ComponentDescriptor;
+                    component1 = selectedDescriptor == null ? selectedReference.OwnerComponent : selectedDescriptor.Component;
                     component1References.Clear();
                     ScanComponentReferences(component1, component1References, "Component 1");
                     FillCombo(component1ReferenceBox, component1References);
@@ -646,7 +656,8 @@ namespace SolidDNA
                 else if (string.Equals(targetName, "Component 2", StringComparison.OrdinalIgnoreCase) && selectedReference.OwnerComponent != null)
                 {
                     SelectComponentInCombo(component2Box, selectedReference.OwnerComponent, true);
-                    component2 = selectedReference.OwnerComponent;
+                    ComponentDescriptor selectedDescriptor = component2Box.SelectedItem as ComponentDescriptor;
+                    component2 = selectedDescriptor == null ? selectedReference.OwnerComponent : selectedDescriptor.Component;
                     component2References.Clear();
                     ScanComponentReferences(component2, component2References, "Component 2");
                     FillCombo(component2ReferenceBox, component2References);
@@ -986,6 +997,40 @@ namespace SolidDNA
                 if (reference == null)
                     return false;
 
+                // For reference geometry loaded from a component document, select it in assembly context.
+                // Selecting the raw part Feature object is unreliable in an assembly and can make AddMate fail.
+                if (reference.Feature != null && reference.Kind == ReferenceKind.Plane)
+                {
+                    string featureName = SafeFeatureName(reference.Feature);
+                    string selectName = featureName;
+                    if (reference.OwnerComponent != null)
+                    {
+                        string componentName = SafeComponentName(reference.OwnerComponent);
+                        if (!string.IsNullOrWhiteSpace(componentName))
+                            selectName = featureName + "@" + componentName;
+                    }
+
+                    try
+                    {
+                        IModelDocExtension extension = assemblyModel.Extension as IModelDocExtension;
+                        if (extension != null && extension.SelectByID2(selectName, "PLANE", 0, 0, 0, append, 0, null, 0))
+                            return true;
+                    }
+                    catch
+                    {
+                    }
+
+                    // Fallback for top-level assembly planes.
+                    try
+                    {
+                        if (reference.OwnerComponent == null && reference.Feature.Select2(append, -1))
+                            return true;
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 object selectable = reference.Selectable ?? reference.SketchObject ?? reference.Feature;
                 if (selectable == null)
                     return false;
@@ -1081,9 +1126,16 @@ namespace SolidDNA
             if (componentModel == null)
                 return;
 
+            List<ReferenceDescriptor> scanned = new List<ReferenceDescriptor>();
             Feature root = null;
             try { root = componentModel.FirstFeature() as Feature; } catch { root = null; }
-            TraverseReferenceFeatures(root, false, output, component, componentModel, labelPrefix, false);
+            TraverseReferenceFeatures(root, false, scanned, component, componentModel, labelPrefix, false);
+
+            foreach (ReferenceDescriptor reference in scanned)
+            {
+                if (reference != null && reference.Kind == ReferenceKind.Plane)
+                    output.Add(reference);
+            }
         }
 
         internal static void ScanAssemblyReferences(IModelDoc2 assemblyModel, List<ReferenceDescriptor> output)
@@ -1292,6 +1344,31 @@ namespace SolidDNA
             }
         }
 
+        internal static string BuildFeatureTreeLikeName(string componentName, string componentDescription, string configurationName)
+        {
+            string primary = string.IsNullOrWhiteSpace(componentName) ? "<component>" : componentName.Trim();
+            string description = string.IsNullOrWhiteSpace(componentDescription) ? string.Empty : componentDescription.Trim();
+            string configuration = string.IsNullOrWhiteSpace(configurationName) ? string.Empty : configurationName.Trim();
+
+            if (!string.IsNullOrWhiteSpace(description) && !string.IsNullOrWhiteSpace(configuration))
+                return primary + " ('" + description + "' " + configuration + ")";
+
+            if (!string.IsNullOrWhiteSpace(description))
+                return primary + " ('" + description + "')";
+
+            if (!string.IsNullOrWhiteSpace(configuration))
+                return primary + " (" + configuration + ")";
+
+            return primary;
+        }
+
+        internal static string SafeReferencedConfiguration(IComponent2 component)
+        {
+            if (component == null)
+                return string.Empty;
+            try { return component.ReferencedConfiguration ?? string.Empty; } catch { return string.Empty; }
+        }
+
         internal static string SafeFeatureName(Feature feature)
         {
             if (feature == null)
@@ -1318,6 +1395,17 @@ namespace SolidDNA
             if (component == null)
                 return string.Empty;
             try { return component.GetPathName() ?? string.Empty; } catch { return string.Empty; }
+        }
+
+        internal static string GetTopLevelComponentName(IComponent2 component)
+        {
+            string name = SafeComponentName(component);
+            if (string.IsNullOrWhiteSpace(name))
+                return string.Empty;
+            int slash = name.IndexOf('/');
+            if (slash > 0)
+                return name.Substring(0, slash);
+            return name;
         }
 
         internal static bool ContainsComponent(List<IComponent2> components, IComponent2 candidate)

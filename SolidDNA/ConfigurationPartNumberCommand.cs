@@ -13,9 +13,10 @@ namespace SolidDNA
     /// Configuration property editor.
     ///
     /// Edits:
-    /// - Configuration description.
+    /// - Configuration name.
+    /// - Configuration-specific custom property Description, equivalent to design-table $PRP@Description.
     /// - SOLIDWORKS BOM part number field: IConfiguration.AlternateName + UseAlternateNameInBOM.
-    /// - Selected configuration-specific custom properties.
+    /// - Selected configuration-specific custom properties, including Specification1.
     ///
     /// Empty cells are not written. Use Clear Column to intentionally blank a value.
     /// </summary>
@@ -95,6 +96,19 @@ namespace SolidDNA
                 return string.Empty;
             try { return configuration.Description == null ? string.Empty : configuration.Description.Trim(); }
             catch { return string.Empty; }
+        }
+
+        internal static bool IsReservedGridPropertyName(string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(propertyName))
+                return false;
+
+            return
+                string.Equals(propertyName, "Description", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(propertyName, "BOM Part Number", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(propertyName, "Configuration", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(propertyName, "Derived", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(propertyName, "Status", StringComparison.OrdinalIgnoreCase);
         }
 
         internal static bool IsDerivedConfiguration(IConfiguration configuration)
@@ -215,6 +229,7 @@ namespace SolidDNA
         internal sealed class ConfigurationInfo
         {
             public string Name = string.Empty;
+            public string OriginalName = string.Empty;
             public IConfiguration Configuration;
             public ICustomPropertyManager PropertyManager;
             public string Description = string.Empty;
@@ -263,7 +278,7 @@ namespace SolidDNA
                 MinimumSize = new Size(980, 560);
 
                 Label helpLabel = new Label();
-                helpLabel.Text = "Edit configuration description, SOLIDWORKS BOM part number, and selected configuration-specific custom-property columns. Empty cells are not written.";
+                helpLabel.Text = "Edit configuration name, configuration-specific $PRP@Description, SOLIDWORKS BOM part number, and selected configuration custom-property columns. Empty cells are not written.";
                 helpLabel.Left = 12;
                 helpLabel.Top = 12;
                 helpLabel.Width = 1230;
@@ -508,14 +523,18 @@ namespace SolidDNA
                     ICustomPropertyManager propertyManager = GetConfigurationPropertyManager(modelDoc, configurationName);
                     ConfigurationInfo info = new ConfigurationInfo();
                     info.Name = configurationName;
+                    info.OriginalName = configurationName;
                     info.Configuration = configuration;
                     info.PropertyManager = propertyManager;
-                    info.Description = GetConfigurationDescription(configuration);
+                    info.Description = ReadTextProperty(propertyManager, "Description");
                     info.BomPartNumber = GetConfigurationBomPartNumber(configuration);
                     info.IsDerived = IsDerivedConfiguration(configuration);
 
                     foreach (string propertyName in GetPropertyNames(propertyManager))
                     {
+                        if (IsReservedGridPropertyName(propertyName))
+                            continue;
+
                         if (!ContainsIgnoreCase(allCustomPropertyNames, propertyName))
                             allCustomPropertyNames.Add(propertyName);
                         info.CustomProperties[propertyName] = ReadTextProperty(propertyManager, propertyName);
@@ -524,13 +543,43 @@ namespace SolidDNA
                     configurations.Add(info);
                 }
 
+                for (int i = visibleCustomPropertyNames.Count - 1; i >= 0; i--)
+                {
+                    if (IsReservedGridPropertyName(visibleCustomPropertyNames[i]))
+                        visibleCustomPropertyNames.RemoveAt(i);
+                }
+
+                EnsureCustomPropertyNameAvailable("Specification1");
+
                 if (visibleCustomPropertyNames.Count == 0)
                 {
                     foreach (string name in dropdownSettings.GetVisibleColumns("Configuration"))
                     {
-                        if (ContainsIgnoreCase(allCustomPropertyNames, name) && !ContainsIgnoreCase(visibleCustomPropertyNames, name))
+                        if (!IsReservedGridPropertyName(name) && ContainsIgnoreCase(allCustomPropertyNames, name) && !ContainsIgnoreCase(visibleCustomPropertyNames, name))
                             visibleCustomPropertyNames.Add(name);
                     }
+                }
+
+                // Specification1 is a project-standard configuration custom property.
+                // Keep it visible by default so existing values are easy to inspect and edit.
+                if (ContainsIgnoreCase(allCustomPropertyNames, "Specification1") && !ContainsIgnoreCase(visibleCustomPropertyNames, "Specification1"))
+                    visibleCustomPropertyNames.Add("Specification1");
+            }
+
+            private void EnsureCustomPropertyNameAvailable(string propertyName)
+            {
+                if (string.IsNullOrWhiteSpace(propertyName) || IsReservedGridPropertyName(propertyName))
+                    return;
+
+                if (!ContainsIgnoreCase(allCustomPropertyNames, propertyName))
+                    allCustomPropertyNames.Add(propertyName);
+
+                foreach (ConfigurationInfo info in configurations)
+                {
+                    if (info == null || info.CustomProperties.ContainsKey(propertyName))
+                        continue;
+
+                    info.CustomProperties[propertyName] = ReadTextProperty(info.PropertyManager, propertyName);
                 }
             }
 
@@ -545,13 +594,17 @@ namespace SolidDNA
                 applyColumn.Width = 55;
                 grid.Columns.Add(applyColumn);
 
-                AddTextColumn(ConfigurationColumnName, "Configuration", 240, true);
-                AddTextColumn(DescriptionColumnName, "Description", 220, false);
+                AddTextColumn(ConfigurationColumnName, "Configuration", 240, false);
+                AddTextColumn(DescriptionColumnName, "Description ($PRP)", 220, false);
                 AddTextColumn(BomPartNumberColumnName, "BOM Part Number", 145, false);
                 AddCheckColumn(DerivedColumnName, "Derived", 70, true);
 
                 foreach (string propertyName in visibleCustomPropertyNames)
+                {
+                    if (IsReservedGridPropertyName(propertyName) || grid.Columns.Contains(propertyName))
+                        continue;
                     AddTextColumn(propertyName, propertyName, 150, false);
+                }
 
                 AddTextColumn(StatusColumnName, "Status", 220, true);
 
@@ -607,7 +660,10 @@ namespace SolidDNA
                 propertySelector.Items.Add("Description");
                 propertySelector.Items.Add("BOM Part Number");
                 foreach (string name in visibleCustomPropertyNames)
-                    propertySelector.Items.Add(name);
+                {
+                    if (!IsReservedGridPropertyName(name))
+                        propertySelector.Items.Add(name);
+                }
 
                 if (!string.IsNullOrWhiteSpace(current) && propertySelector.Items.Contains(current))
                     propertySelector.SelectedItem = current;
@@ -765,10 +821,38 @@ namespace SolidDNA
 
             private void ToggleAllApply()
             {
-                int totalRows = CountRealRows();
-                int checkedRows = CountCheckedRows();
-                bool newValue = !(totalRows > 0 && checkedRows == totalRows);
-                SetAllApply(newValue);
+                List<DataGridViewRow> targetRows = GetSelectedGridRows();
+                bool usingSelection = targetRows.Count > 1;
+
+                if (!usingSelection)
+                {
+                    targetRows = new List<DataGridViewRow>();
+                    foreach (DataGridViewRow row in grid.Rows)
+                    {
+                        if (!row.IsNewRow)
+                            targetRows.Add(row);
+                    }
+                }
+
+                if (targetRows.Count == 0)
+                    return;
+
+                bool allTargetRowsChecked = true;
+                foreach (DataGridViewRow row in targetRows)
+                {
+                    if (!IsRowChecked(row))
+                    {
+                        allTargetRowsChecked = false;
+                        break;
+                    }
+                }
+
+                bool newValue = !allTargetRowsChecked;
+                foreach (DataGridViewRow row in targetRows)
+                {
+                    if (!row.IsNewRow)
+                        row.Cells[ApplyColumnName].Value = newValue;
+                }
             }
 
             private void SetSelectedColumnValue(bool allRows)
@@ -829,8 +913,7 @@ namespace SolidDNA
                     {
                         if (columnName == DescriptionColumnName)
                         {
-                            if (info.Configuration != null)
-                                info.Configuration.Description = string.Empty;
+                            SetTextProperty(info.PropertyManager, "Description", string.Empty);
                         }
                         else if (columnName == BomPartNumberColumnName)
                         {
@@ -898,12 +981,33 @@ namespace SolidDNA
                     try
                     {
                         int writes = 0;
+                        string newConfigurationName = CellText(row, ConfigurationColumnName);
                         string description = CellText(row, DescriptionColumnName);
                         string bomPartNumber = CellText(row, BomPartNumberColumnName);
 
+                        if (string.IsNullOrWhiteSpace(newConfigurationName))
+                            throw new InvalidOperationException("Configuration name cannot be blank.");
+
+                        if (!string.Equals(newConfigurationName, info.Name, StringComparison.Ordinal))
+                        {
+                            IConfiguration existingConfiguration = null;
+                            try { existingConfiguration = modelDoc.GetConfigurationByName(newConfigurationName) as IConfiguration; }
+                            catch { existingConfiguration = null; }
+
+                            if (existingConfiguration != null)
+                                throw new InvalidOperationException("Configuration name already exists: " + newConfigurationName);
+
+                            info.Configuration.Name = newConfigurationName;
+                            info.Name = newConfigurationName;
+                            info.PropertyManager = GetConfigurationPropertyManager(modelDoc, newConfigurationName);
+                            row.Cells[ConfigurationColumnName].Value = newConfigurationName;
+                            writes++;
+                        }
+
                         if (!string.IsNullOrWhiteSpace(description))
                         {
-                            info.Configuration.Description = description;
+                            SetTextProperty(info.PropertyManager, "Description", description);
+                            dropdownSettings.LearnOption("Description", description);
                             writes++;
                         }
 
@@ -1040,13 +1144,30 @@ namespace SolidDNA
 
             private void ChooseColumns()
             {
-                using (CutListProfilePropertyCommand.ColumnSelectorForm form = new CutListProfilePropertyCommand.ColumnSelectorForm(allCustomPropertyNames, visibleCustomPropertyNames))
+                List<string> selectableNames = new List<string>();
+                foreach (string name in allCustomPropertyNames)
+                {
+                    if (!IsReservedGridPropertyName(name) && !ContainsIgnoreCase(selectableNames, name))
+                        selectableNames.Add(name);
+                }
+
+                List<string> selectedNames = new List<string>();
+                foreach (string name in visibleCustomPropertyNames)
+                {
+                    if (!IsReservedGridPropertyName(name) && !ContainsIgnoreCase(selectedNames, name))
+                        selectedNames.Add(name);
+                }
+
+                using (CutListProfilePropertyCommand.ColumnSelectorForm form = new CutListProfilePropertyCommand.ColumnSelectorForm(selectableNames, selectedNames))
                 {
                     if (form.ShowDialog(this) != DialogResult.OK)
                         return;
                     visibleCustomPropertyNames.Clear();
                     foreach (string name in form.SelectedColumns)
-                        visibleCustomPropertyNames.Add(name);
+                    {
+                        if (!IsReservedGridPropertyName(name) && !ContainsIgnoreCase(visibleCustomPropertyNames, name))
+                            visibleCustomPropertyNames.Add(name);
+                    }
                     dropdownSettings.SetVisibleColumns("Configuration", visibleCustomPropertyNames);
                     dropdownSettings.Save();
                     BuildGrid();
@@ -1059,6 +1180,11 @@ namespace SolidDNA
                 if (string.IsNullOrWhiteSpace(propertyName))
                     return;
                 propertyName = propertyName.Trim();
+                if (IsReservedGridPropertyName(propertyName))
+                {
+                    MessageBox.Show("That property is already handled by a fixed column.", "Cabin Tools", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
                 if (!ContainsIgnoreCase(allCustomPropertyNames, propertyName))
                     allCustomPropertyNames.Add(propertyName);
                 if (!ContainsIgnoreCase(visibleCustomPropertyNames, propertyName))
@@ -1078,6 +1204,34 @@ namespace SolidDNA
             {
                 if (rowIndex >= 0 && rowIndex < grid.Rows.Count)
                     grid.Rows[rowIndex].Cells[ApplyColumnName].Value = value;
+            }
+
+            private List<DataGridViewRow> GetSelectedGridRows()
+            {
+                List<DataGridViewRow> selectedRows = new List<DataGridViewRow>();
+
+                if (grid == null)
+                    return selectedRows;
+
+                foreach (DataGridViewRow row in grid.SelectedRows)
+                {
+                    if (row == null || row.IsNewRow || selectedRows.Contains(row))
+                        continue;
+                    selectedRows.Add(row);
+                }
+
+                foreach (DataGridViewCell cell in grid.SelectedCells)
+                {
+                    if (cell == null || cell.RowIndex < 0 || cell.RowIndex >= grid.Rows.Count)
+                        continue;
+
+                    DataGridViewRow row = grid.Rows[cell.RowIndex];
+                    if (row == null || row.IsNewRow || selectedRows.Contains(row))
+                        continue;
+                    selectedRows.Add(row);
+                }
+
+                return selectedRows;
             }
 
             private void SetAllApply(bool value)
