@@ -192,14 +192,96 @@ namespace SolidDNA
         public static string BuildPdfFileName(
             CabinNamingValues values)
         {
+            string cabinName = BuildCabinNameForPdf(
+                values.CabinTypeDescription,
+                values.CabinTypeDefined);
+
             string fileName =
                 Clean(values.DrwNumber) + "_" +
                 Clean(values.Revision) + " " +
-                Clean(values.CabinTypeDescription) + " " +
-                Clean(values.CabinTypeDefined) + " - " +
-                Clean(values.LayoutType) + ".pdf";
+                cabinName + " - " +
+                CleanLayoutTypeForPdf(values.LayoutType) + ".pdf";
 
             return MakeSafeFileName(fileName);
+        }
+
+        private static string BuildCabinNameForPdf(
+            string cabinTypeDescription,
+            string cabinTypeDefined)
+        {
+            string description = Clean(cabinTypeDescription);
+            string defined = Clean(cabinTypeDefined);
+
+            if (string.IsNullOrWhiteSpace(description))
+                return defined;
+
+            if (string.IsNullOrWhiteSpace(defined))
+                return description;
+
+            // The intended project naming is for example:
+            // Cabin Compact+ (1) B + S -> Cabin Compact+ (1) BS
+            // Cabin Compact+ (1)   + BS -> Cabin Compact+ (1) BS
+            if (EndsWithSeparateSingleLetter(description) &&
+                IsShortAlphabeticCode(defined))
+            {
+                return description + defined;
+            }
+
+            return description + " " + defined;
+        }
+
+        private static bool EndsWithSeparateSingleLetter(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length < 2)
+                return false;
+
+            int lastIndex = value.Length - 1;
+            return char.IsLetter(value[lastIndex]) &&
+                   char.IsWhiteSpace(value[lastIndex - 1]);
+        }
+
+        private static bool IsShortAlphabeticCode(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length > 3)
+                return false;
+
+            for (int index = 0; index < value.Length; index++)
+            {
+                if (!char.IsLetter(value[index]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static string CleanLayoutTypeForPdf(string layoutType)
+        {
+            string value = Clean(layoutType);
+
+            if (string.IsNullOrWhiteSpace(value))
+                return value;
+
+            int lastSpace = value.LastIndexOf(' ');
+
+            if (lastSpace <= 0 || lastSpace >= value.Length - 1)
+                return value;
+
+            string suffix = value.Substring(lastSpace + 1);
+            int numericSuffix;
+
+            if (!int.TryParse(suffix, out numericSuffix))
+                return value;
+
+            string withoutSuffix = value.Substring(0, lastSpace).Trim();
+
+            if (withoutSuffix.IndexOf(
+                    "layout",
+                    StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return value;
+            }
+
+            return withoutSuffix;
         }
 
         public static List<string> GetMissingPdfNamingProperties(
@@ -479,9 +561,6 @@ namespace SolidDNA
 
     internal static class CabinPropertyService
     {
-        private const string Title2Property = "Title2";
-        private const string Title3Property = "Title3";
-
         public static bool IsSupportedDocument(
             IModelDoc2 modelDoc)
         {
@@ -532,89 +611,6 @@ namespace SolidDNA
             return modelDoc != null &&
                    modelDoc.GetType() ==
                        (int)swDocumentTypes_e.swDocDRAWING;
-        }
-
-        public static bool SynchronizeDerivedTitleProperties(
-            IModelDoc2 modelDoc)
-        {
-            if (!IsDrawing(modelDoc))
-            {
-                throw new InvalidOperationException(
-                    "Title2 and Title3 can be synchronized only for a drawing.");
-            }
-
-            CabinNamingValues values =
-                ReadNamingValues(modelDoc);
-
-            string title2 =
-                CabinPropertyRules.Clean(
-                    values.CabinTypeDescription);
-
-            string cabinTypeDefined =
-                CabinPropertyRules.Clean(
-                    values.CabinTypeDefined);
-
-            string layoutType =
-                CabinPropertyRules.Clean(
-                    values.LayoutType);
-
-            string title3;
-
-            if (string.IsNullOrWhiteSpace(cabinTypeDefined))
-            {
-                title3 = layoutType;
-            }
-            else if (string.IsNullOrWhiteSpace(layoutType))
-            {
-                title3 = cabinTypeDefined;
-            }
-            else
-            {
-                title3 =
-                    cabinTypeDefined +
-                    " - " +
-                    layoutType;
-            }
-
-            string currentTitle2 =
-                ReadResolvedProperty(
-                    modelDoc,
-                    Title2Property);
-
-            string currentTitle3 =
-                ReadResolvedProperty(
-                    modelDoc,
-                    Title3Property);
-
-            bool title2Changed =
-                !string.Equals(
-                    currentTitle2,
-                    title2,
-                    StringComparison.Ordinal);
-
-            bool title3Changed =
-                !string.Equals(
-                    currentTitle3,
-                    title3,
-                    StringComparison.Ordinal);
-
-            if (title2Changed)
-            {
-                WriteTextProperty(
-                    modelDoc,
-                    Title2Property,
-                    title2);
-            }
-
-            if (title3Changed)
-            {
-                WriteTextProperty(
-                    modelDoc,
-                    Title3Property,
-                    title3);
-            }
-
-            return title2Changed || title3Changed;
         }
 
         public static CabinNamingValues ReadNamingValues(

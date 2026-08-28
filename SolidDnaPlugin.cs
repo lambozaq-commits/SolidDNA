@@ -216,7 +216,7 @@ namespace SolidDNA
                         commandIconPathFormat,
                     tooltip: "Export tools",
                     hint:
-                        "Export PDFs and create previous-version drawing copies.",
+                        "Export PDFs.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -252,7 +252,7 @@ namespace SolidDNA
                         commandIconPathFormat,
                     tooltip: "Assembly tools",
                     hint:
-                        "Mate assistant and component configuration manager.",
+                        "Assembly component configuration manager.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -505,26 +505,6 @@ namespace SolidDNA
             {
                 new CommandManagerItem
                 {
-                    Name = "Reference Mate Assistant",
-                    Tooltip =
-                        "Mate component reference geometry to assembly reference geometry or selected Basic Sketch geometry.",
-                    Hint =
-                        "Select components/references in SOLIDWORKS or from the assistant, then create the mate.",
-                    ImageIndex = 1,
-                    VisibleForDrawings = true,
-                    VisibleForAssemblies = true,
-                    VisibleForParts = true,
-                    OnClick =
-                        ReferenceMateAssistantCommand
-                            .ShowReferenceMateAssistantForm,
-                    OnStateCheck = args =>
-                        args.Result =
-                            CabinToolsCommandState
-                                .ForAssembly()
-                },
-
-                new CommandManagerItem
-                {
                     Name = "Assembly Configuration Manager",
                     Tooltip =
                         "Change referenced configurations for assembly component instances.",
@@ -569,26 +549,6 @@ namespace SolidDNA
                             CommandManagerItemState
                                 .DeselectedEnabled
                 },
-
-                new CommandManagerItem
-                {
-                    Name = "Save Drawings as SW2025",
-                    Tooltip =
-                        "Create SOLIDWORKS 2025 drawing copies.",
-                    Hint =
-                        "Create previous-version drawing copies outside PDM. The source drawing is never overwritten.",
-                    ImageIndex = 3,
-                    VisibleForDrawings = true,
-                    VisibleForAssemblies = true,
-                    VisibleForParts = true,
-                    OnClick =
-                        PreviousVersionDrawingCommand
-                            .ShowSaveDrawingsForm,
-                    OnStateCheck = args =>
-                        args.Result =
-                            CabinToolsCommandState
-                                .ForSupportedDocument()
-                }
             };
         }
 
@@ -611,6 +571,26 @@ namespace SolidDNA
                     OnClick =
                         SheetFormatCommand
                             .ShowSheetFormatForm,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForDrawing()
+                },
+
+                new CommandManagerItem
+                {
+                    Name = "Auto Arrange Balloons",
+                    Tooltip =
+                        "Create and arrange BOM balloons for the selected drawing view.",
+                    Hint =
+                        "Select one drawing view, then create one arranged balloon per visible referenced component/file-configuration group. No magnetic lines are used.",
+                    ImageIndex = 4,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        AutoArrangeBalloonsCommand
+                            .RunAutoArrangeBalloons,
                     OnStateCheck = args =>
                         args.Result =
                             CabinToolsCommandState
