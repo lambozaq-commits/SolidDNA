@@ -3,7 +3,5 @@
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="SolidDNA/SolidDNA.csproj" Id="94df2321-22c7-4442-8ccd-17d2d67784cb">
-    <Platform Solution="Debug|x64" Project="x64" />
-  </Project>
+  <Project Path="SolidDNA/SolidDNA.csproj" Id="94df2321-22c7-4442-8ccd-17d2d67784cb" />
 </Solution>

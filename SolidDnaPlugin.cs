@@ -216,7 +216,7 @@ namespace SolidDNA
                         commandIconPathFormat,
                     tooltip: "Export tools",
                     hint:
-                        "Export PDFs.",
+                        "Export PDFs and configuration neutral files.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -521,6 +521,26 @@ namespace SolidDNA
                         args.Result =
                             CabinToolsCommandState
                                 .ForAssembly()
+                },
+
+                new CommandManagerItem
+                {
+                    Name = "Reorder Room Layout Assembly",
+                    Tooltip =
+                        "Reorder top-level room-layout assembly components from a reference .txt list.",
+                    Hint =
+                        "Select a text file containing the wanted component order, preview the top-level matches, then apply the FeatureManager tree reorder.",
+                    ImageIndex = 1,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        RoomLayoutAssemblyReorderCommand
+                            .ShowRoomLayoutAssemblyReorderForm,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForAssembly()
                 }
             };
         }
@@ -548,6 +568,26 @@ namespace SolidDNA
                         args.Result =
                             CommandManagerItemState
                                 .DeselectedEnabled
+                },
+
+                new CommandManagerItem
+                {
+                    Name = "Export Configurations",
+                    Tooltip =
+                        "Export part or assembly configurations as separate neutral files.",
+                    Hint =
+                        "Export selected configurations as STEP AP203, IGES, or ACIS using the document Description and configuration name.",
+                    ImageIndex = 2,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick =
+                        SolidDNA.ConfigurationNeutralExportCommand
+                            .ShowConfigurationNeutralExportForm,
+                    OnStateCheck = args =>
+                        args.Result =
+                            CabinToolsCommandState
+                                .ForPartOrAssembly()
                 },
             };
         }

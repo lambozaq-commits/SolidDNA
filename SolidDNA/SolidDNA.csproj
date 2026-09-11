@@ -132,6 +132,7 @@
     <Compile Include="CutListProfilePropertyCommand.cs" />
     <Compile Include="ConfigurationPartNumberCommand.cs" />
     <Compile Include="AssemblyConfigurationManagerCommand.cs" />
+    <Compile Include="RoomLayoutAssemblyReorderCommand.cs" />
     <Compile Include="SheetFormatForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -139,6 +140,7 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="PDF Export.cs" />
+    <Compile Include="ConfigurationNeutralExportCommand.cs" />
     <Compile Include="PdfBatchExportForm.cs">
       <SubType>Form</SubType>
     </Compile>
