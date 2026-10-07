@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -6,10 +6,9 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using CADBooster.SolidDna;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-
-using SwEnvironment = CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -63,7 +62,7 @@ namespace SolidDNA
         {
             try
             {
-                ISldWorks swApp = SwEnvironment.Application.UnsafeObject;
+                ISldWorks swApp = IApplication.UnsafeObject;
                 IModelDoc2 modelDoc = swApp == null ? null : swApp.ActiveDoc as IModelDoc2;
                 if (modelDoc == null)
                     return null;
@@ -192,7 +191,7 @@ namespace SolidDNA
         {
             try
             {
-                SwEnvironment.Application.ShowMessageBox(
+                IApplication.ShowMessageBox(
                     message,
                     SolidWorksMessageBoxIcon.Warning);
             }
@@ -543,22 +542,10 @@ namespace SolidDNA
 
             private void ToggleAllRows()
             {
-                bool allChecked = grid.Rows.Count > 0;
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    if (!ToBool(row.Cells["Export"].Value))
-                    {
-                        allChecked = false;
-                        break;
-                    }
-                }
-
-                // SOLIDWORKS-style toggle requested by the user:
-                // partial selection -> check everything first;
-                // only when everything is already checked -> uncheck everything.
-                bool targetState = !allChecked;
-                foreach (DataGridViewRow row in grid.Rows)
-                    row.Cells["Export"].Value = targetState;
+                GridCheckBehavior.ToggleSelectedThenAll(
+                    grid,
+                    row => ToBool(row.Cells["Export"].Value),
+                    (row, value) => row.Cells["Export"].Value = value);
 
                 UpdateSummary();
             }
@@ -729,7 +716,7 @@ namespace SolidDNA
 
                 try
                 {
-                    swApp = SwEnvironment.Application.UnsafeObject;
+                    swApp = IApplication.UnsafeObject;
                     if (swApp == null)
                         throw new InvalidOperationException("SOLIDWORKS is not available.");
 
@@ -787,7 +774,7 @@ namespace SolidDNA
                         }
 
                         SetRowStatus(gridRow, "Exporting...");
-                        Application.DoEvents();
+                        System.Windows.Forms.Application.DoEvents();
 
                         try
                         {

@@ -229,6 +229,7 @@ namespace SolidDNA
         internal sealed class ConfigurationInfo
         {
             public string Name = string.Empty;
+            public string PendingName = string.Empty;
             public string OriginalName = string.Empty;
             public IConfiguration Configuration;
             public ICustomPropertyManager PropertyManager;
@@ -248,14 +249,6 @@ namespace SolidDNA
 
             private DataGridView grid;
             private Label statusLabel;
-            private ComboBox propertySelector;
-            private ComboBox valueSelector;
-            private TextBox startNumberTextBox;
-            private NumericUpDown digitCountBox;
-            private TextBox prefixTextBox;
-            private TextBox suffixTextBox;
-            private CheckBox overwriteBomNumbersCheckBox;
-            private CheckBox includeDerivedInBulkNumberingCheckBox;
 
             public ConfigurationPropertyEditorForm(IModelDoc2 modelDoc)
             {
@@ -277,190 +270,52 @@ namespace SolidDNA
             {
                 MinimumSize = new Size(980, 560);
 
-                Label helpLabel = new Label();
-                helpLabel.Text = "Edit configuration name, configuration-specific $PRP@Description, SOLIDWORKS BOM part number, and selected configuration custom-property columns. Empty cells are not written.";
-                helpLabel.Left = 12;
-                helpLabel.Top = 12;
-                helpLabel.Width = 1230;
-                helpLabel.Height = 24;
-                Controls.Add(helpLabel);
+                Button editButton = new Button();
+                editButton.Text = "Edit...";
+                editButton.Left = 12;
+                editButton.Top = 14;
+                editButton.Width = 105;
+                editButton.Click += delegate { ShowEditMenu(); };
+                Controls.Add(editButton);
 
-                Button chooseColumnsButton = new Button();
-                chooseColumnsButton.Text = "Choose columns";
-                chooseColumnsButton.Left = 12;
-                chooseColumnsButton.Top = 42;
-                chooseColumnsButton.Width = 135;
-                chooseColumnsButton.Click += delegate { ChooseColumns(); };
-                Controls.Add(chooseColumnsButton);
+                Button numberButton = new Button();
+                numberButton.Text = "Number...";
+                numberButton.Left = 125;
+                numberButton.Top = 14;
+                numberButton.Width = 105;
+                numberButton.Click += delegate { ShowNumberDialog(); };
+                Controls.Add(numberButton);
 
-                Button addColumnButton = new Button();
-                addColumnButton.Text = "Add property column";
-                addColumnButton.Left = 155;
-                addColumnButton.Top = 42;
-                addColumnButton.Width = 150;
-                addColumnButton.Click += delegate { AddNewPropertyColumn(); };
-                Controls.Add(addColumnButton);
-
-                Label propertyLabel = new Label();
-                propertyLabel.Text = "Column:";
-                propertyLabel.Left = 325;
-                propertyLabel.Top = 47;
-                propertyLabel.Width = 60;
-                Controls.Add(propertyLabel);
-
-                propertySelector = new ComboBox();
-                propertySelector.Left = 390;
-                propertySelector.Top = 42;
-                propertySelector.Width = 180;
-                propertySelector.DropDownStyle = ComboBoxStyle.DropDownList;
-                propertySelector.SelectedIndexChanged += delegate { UpdateValueOptions(); };
-                Controls.Add(propertySelector);
-
-                Label valueLabel = new Label();
-                valueLabel.Text = "Value:";
-                valueLabel.Left = 580;
-                valueLabel.Top = 47;
-                valueLabel.Width = 45;
-                Controls.Add(valueLabel);
-
-                valueSelector = new ComboBox();
-                valueSelector.Left = 630;
-                valueSelector.Top = 42;
-                valueSelector.Width = 210;
-                valueSelector.DropDownStyle = ComboBoxStyle.DropDown;
-                Controls.Add(valueSelector);
-
-                Button setValueButton = new Button();
-                setValueButton.Text = "Set value";
-                setValueButton.Left = 850;
-                setValueButton.Top = 42;
-                setValueButton.Width = 105;
-                setValueButton.Click += delegate { SetSelectedColumnValueSmart(); };
-                Controls.Add(setValueButton);
-
-                Label startLabel = new Label();
-                startLabel.Text = "Start:";
-                startLabel.Left = 12;
-                startLabel.Top = 82;
-                startLabel.Width = 45;
-                Controls.Add(startLabel);
-
-                startNumberTextBox = new TextBox();
-                startNumberTextBox.Left = 60;
-                startNumberTextBox.Top = 77;
-                startNumberTextBox.Width = 80;
-                startNumberTextBox.Text = "1001";
-                Controls.Add(startNumberTextBox);
-
-                Label digitsLabel = new Label();
-                digitsLabel.Text = "Digits:";
-                digitsLabel.Left = 150;
-                digitsLabel.Top = 82;
-                digitsLabel.Width = 45;
-                Controls.Add(digitsLabel);
-
-                digitCountBox = new NumericUpDown();
-                digitCountBox.Left = 198;
-                digitCountBox.Top = 77;
-                digitCountBox.Width = 55;
-                digitCountBox.Minimum = 1;
-                digitCountBox.Maximum = 12;
-                digitCountBox.Value = 4;
-                Controls.Add(digitCountBox);
-
-                Label prefixLabel = new Label();
-                prefixLabel.Text = "Prefix:";
-                prefixLabel.Left = 265;
-                prefixLabel.Top = 82;
-                prefixLabel.Width = 45;
-                Controls.Add(prefixLabel);
-
-                prefixTextBox = new TextBox();
-                prefixTextBox.Left = 315;
-                prefixTextBox.Top = 77;
-                prefixTextBox.Width = 80;
-                Controls.Add(prefixTextBox);
-
-                Label suffixLabel = new Label();
-                suffixLabel.Text = "Suffix:";
-                suffixLabel.Left = 405;
-                suffixLabel.Top = 82;
-                suffixLabel.Width = 45;
-                Controls.Add(suffixLabel);
-
-                suffixTextBox = new TextBox();
-                suffixTextBox.Left = 455;
-                suffixTextBox.Top = 77;
-                suffixTextBox.Width = 80;
-                Controls.Add(suffixTextBox);
-
-                Button useMaxButton = new Button();
-                useMaxButton.Text = "Use max + 1";
-                useMaxButton.Left = 545;
-                useMaxButton.Top = 76;
-                useMaxButton.Width = 100;
-                useMaxButton.Click += delegate { SetStartToMaxPlusOne(); };
-                Controls.Add(useMaxButton);
-
-                Button fillBomButton = new Button();
-                fillBomButton.Text = "Fill BOM numbers";
-                fillBomButton.Left = 655;
-                fillBomButton.Top = 76;
-                fillBomButton.Width = 135;
-                fillBomButton.Click += delegate { FillBomNumbersSmart(); };
-                Controls.Add(fillBomButton);
-
-                overwriteBomNumbersCheckBox = new CheckBox();
-                overwriteBomNumbersCheckBox.Text = "Overwrite existing BOM numbers when applying";
-                overwriteBomNumbersCheckBox.Left = 12;
-                overwriteBomNumbersCheckBox.Top = 111;
-                overwriteBomNumbersCheckBox.Width = 330;
-                overwriteBomNumbersCheckBox.Checked = false;
-                Controls.Add(overwriteBomNumbersCheckBox);
-
-                includeDerivedInBulkNumberingCheckBox = new CheckBox();
-                includeDerivedInBulkNumberingCheckBox.Text = "Include derived configs in bulk numbering";
-                includeDerivedInBulkNumberingCheckBox.Left = 355;
-                includeDerivedInBulkNumberingCheckBox.Top = 111;
-                includeDerivedInBulkNumberingCheckBox.Width = 330;
-                includeDerivedInBulkNumberingCheckBox.Checked = false;
-                Controls.Add(includeDerivedInBulkNumberingCheckBox);
-
-                Button clearColumnButton = new Button();
-                clearColumnButton.Text = "Clear column";
-                clearColumnButton.Left = 700;
-                clearColumnButton.Top = 106;
-                clearColumnButton.Width = 115;
-                clearColumnButton.Click += delegate { ClearSelectedColumnSmart(); };
-                Controls.Add(clearColumnButton);
+                Button orderButton = new Button();
+                orderButton.Text = "Order...";
+                orderButton.Left = 238;
+                orderButton.Top = 14;
+                orderButton.Width = 100;
+                orderButton.Click += delegate { ShowOrderDialog(); };
+                Controls.Add(orderButton);
 
                 Button toggleCheckButton = new Button();
                 toggleCheckButton.Text = "Check / uncheck all";
-                toggleCheckButton.Left = 825;
-                toggleCheckButton.Top = 106;
-                toggleCheckButton.Width = 140;
+                toggleCheckButton.Left = 346;
+                toggleCheckButton.Top = 14;
+                toggleCheckButton.Width = 145;
                 toggleCheckButton.Click += delegate { ToggleAllApply(); };
                 Controls.Add(toggleCheckButton);
 
-                Button refreshButton = new Button();
-                refreshButton.Text = "Refresh configurations";
-                refreshButton.Left = 975;
-                refreshButton.Top = 106;
-                refreshButton.Width = 150;
-                refreshButton.Click += delegate { LoadConfigurationData(); BuildGrid(); };
-                Controls.Add(refreshButton);
-
                 grid = new DataGridView();
                 grid.Left = 12;
-                grid.Top = 152;
+                grid.Top = 54;
                 grid.Width = 1280;
-                grid.Height = 460;
+                grid.Height = 558;
                 grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 grid.AllowUserToAddRows = false;
                 grid.AllowUserToDeleteRows = false;
+                grid.AllowUserToResizeRows = false;
+                grid.MultiSelect = true;
                 grid.RowHeadersVisible = false;
                 grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
                 grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+                grid.EditMode = DataGridViewEditMode.EditOnEnter;
                 grid.CellBeginEdit += delegate(object sender, DataGridViewCellCancelEventArgs e)
                 {
                     if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && grid.Columns[e.ColumnIndex].Name != ApplyColumnName)
@@ -471,33 +326,26 @@ namespace SolidDNA
                     if (grid.IsCurrentCellDirty)
                         grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
                 };
+                grid.DataError += delegate { };
                 Controls.Add(grid);
 
                 statusLabel = new Label();
                 statusLabel.Left = 12;
                 statusLabel.Top = 620;
-                statusLabel.Width = 780;
-                statusLabel.Height = 38;
+                statusLabel.Width = 900;
+                statusLabel.Height = 34;
                 statusLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+                statusLabel.TextAlign = ContentAlignment.MiddleLeft;
                 Controls.Add(statusLabel);
 
                 Button applyButton = new Button();
                 applyButton.Text = "Apply";
-                applyButton.Left = 950;
+                applyButton.Left = 1182;
                 applyButton.Top = 620;
                 applyButton.Width = 110;
                 applyButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
                 applyButton.Click += delegate { ApplyRowsSmart(); };
                 Controls.Add(applyButton);
-
-                Button closeButton = new Button();
-                closeButton.Text = "Close";
-                closeButton.Left = 1070;
-                closeButton.Top = 620;
-                closeButton.Width = 100;
-                closeButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                closeButton.Click += delegate { Close(); };
-                Controls.Add(closeButton);
             }
 
             private void LoadConfigurationData()
@@ -523,6 +371,7 @@ namespace SolidDNA
                     ICustomPropertyManager propertyManager = GetConfigurationPropertyManager(modelDoc, configurationName);
                     ConfigurationInfo info = new ConfigurationInfo();
                     info.Name = configurationName;
+                    info.PendingName = configurationName;
                     info.OriginalName = configurationName;
                     info.Configuration = configuration;
                     info.PropertyManager = propertyManager;
@@ -594,19 +443,18 @@ namespace SolidDNA
                 applyColumn.Width = 55;
                 grid.Columns.Add(applyColumn);
 
-                AddTextColumn(ConfigurationColumnName, "Configuration", 240, false);
-                AddTextColumn(DescriptionColumnName, "Description ($PRP)", 220, false);
-                AddTextColumn(BomPartNumberColumnName, "BOM Part Number", 145, false);
-                AddCheckColumn(DerivedColumnName, "Derived", 70, true);
+                AddTextColumn(ConfigurationColumnName, "Configuration", 250, false);
+                AddTextColumn(DescriptionColumnName, "Description ($PRP)", 230, false);
+                AddTextColumn(BomPartNumberColumnName, "BOM Part Number", 155, false);
 
                 foreach (string propertyName in visibleCustomPropertyNames)
                 {
                     if (IsReservedGridPropertyName(propertyName) || grid.Columns.Contains(propertyName))
                         continue;
-                    AddTextColumn(propertyName, propertyName, 150, false);
+                    AddTextColumn(propertyName, propertyName, 160, false);
                 }
 
-                AddTextColumn(StatusColumnName, "Status", 220, true);
+                AddTextColumn(StatusColumnName, "Status", 240, true);
 
                 foreach (ConfigurationInfo info in configurations)
                 {
@@ -614,11 +462,16 @@ namespace SolidDNA
                     DataGridViewRow row = grid.Rows[rowIndex];
                     row.Tag = info;
                     row.Cells[ApplyColumnName].Value = false;
-                    row.Cells[ConfigurationColumnName].Value = info.Name;
+                    row.Cells[ConfigurationColumnName].Value = string.IsNullOrWhiteSpace(info.PendingName) ? info.Name : info.PendingName;
                     row.Cells[DescriptionColumnName].Value = info.Description;
                     row.Cells[BomPartNumberColumnName].Value = info.BomPartNumber;
-                    row.Cells[DerivedColumnName].Value = info.IsDerived;
                     row.Cells[StatusColumnName].Value = "Ready";
+
+                    if (info.IsDerived)
+                    {
+                        row.Cells[ConfigurationColumnName].Style.Padding = new Padding(18, 0, 0, 0);
+                        row.Cells[ConfigurationColumnName].Style.ForeColor = Color.DimGray;
+                    }
 
                     foreach (string propertyName in visibleCustomPropertyNames)
                     {
@@ -628,8 +481,550 @@ namespace SolidDNA
                     }
                 }
 
-                ReloadPropertySelector();
-                statusLabel.Text = "Loaded " + configurations.Count + " configuration(s). Visible custom-property columns: " + string.Join(", ", visibleCustomPropertyNames.ToArray());
+                statusLabel.Text = configurations.Count + " configuration(s).";
+            }
+
+            private void ShowEditMenu()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Edit";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(420, 118);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Button columns = new Button();
+                    columns.Text = "Columns";
+                    columns.Left = 18;
+                    columns.Top = 34;
+                    columns.Width = 116;
+                    columns.Height = 34;
+                    columns.Click += delegate { dialog.DialogResult = DialogResult.Yes; dialog.Close(); };
+                    dialog.Controls.Add(columns);
+
+                    Button bulk = new Button();
+                    bulk.Text = "Bulk values";
+                    bulk.Left = 151;
+                    bulk.Top = 34;
+                    bulk.Width = 116;
+                    bulk.Height = 34;
+                    bulk.Click += delegate { dialog.DialogResult = DialogResult.No; dialog.Close(); };
+                    dialog.Controls.Add(bulk);
+
+                    Button clear = new Button();
+                    clear.Text = "Clear property";
+                    clear.Left = 284;
+                    clear.Top = 34;
+                    clear.Width = 116;
+                    clear.Height = 34;
+                    clear.Click += delegate { dialog.DialogResult = DialogResult.Retry; dialog.Close(); };
+                    dialog.Controls.Add(clear);
+
+                    DialogResult result = dialog.ShowDialog(this);
+                    if (result == DialogResult.Yes)
+                        ShowColumnsMenu();
+                    else if (result == DialogResult.No)
+                        ShowBulkEditDialog();
+                    else if (result == DialogResult.Retry)
+                        ShowClearPropertyDialog();
+                }
+            }
+
+            private void ShowClearPropertyDialog()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Clear Property";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(390, 160);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    ComboBox propertyBox = new ComboBox();
+                    propertyBox.Left = 24;
+                    propertyBox.Top = 26;
+                    propertyBox.Width = 340;
+                    propertyBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                    propertyBox.Items.Add("Description");
+                    propertyBox.Items.Add("BOM Part Number");
+                    foreach (string name in visibleCustomPropertyNames)
+                    {
+                        if (!propertyBox.Items.Contains(name))
+                            propertyBox.Items.Add(name);
+                    }
+                    if (propertyBox.Items.Count > 0)
+                        propertyBox.SelectedIndex = 0;
+                    dialog.Controls.Add(propertyBox);
+
+                    Button checkedButton = new Button();
+                    checkedButton.Text = "Checked Only";
+                    checkedButton.Left = 70;
+                    checkedButton.Top = 88;
+                    checkedButton.Width = 110;
+                    checkedButton.Click += delegate
+                    {
+                        ClearPropertyRows(Convert.ToString(propertyBox.SelectedItem), false);
+                        dialog.Close();
+                    };
+                    dialog.Controls.Add(checkedButton);
+
+                    Button allButton = new Button();
+                    allButton.Text = "All";
+                    allButton.Left = 198;
+                    allButton.Top = 88;
+                    allButton.Width = 90;
+                    allButton.Click += delegate
+                    {
+                        ClearPropertyRows(Convert.ToString(propertyBox.SelectedItem), true);
+                        dialog.Close();
+                    };
+                    dialog.Controls.Add(allButton);
+                }
+            }
+
+            private void ClearPropertyRows(string displayName, bool allRows)
+            {
+                string columnName = GetGridColumnNameFromDisplayName(displayName);
+                if (string.IsNullOrWhiteSpace(displayName) || !grid.Columns.Contains(columnName))
+                    return;
+
+                int changed = 0;
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (row.IsNewRow)
+                        continue;
+                    if (!allRows && !IsRowChecked(row))
+                        continue;
+
+                    row.Cells[columnName].Value = string.Empty;
+                    row.Cells[ApplyColumnName].Value = true;
+                    row.Cells[StatusColumnName].Value = "Ready to clear";
+                    changed++;
+                }
+
+                statusLabel.Text = changed + " configuration(s) marked for clearing.";
+            }
+
+            private void ShowColumnsMenu()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Columns";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(330, 120);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Button choose = new Button();
+                    choose.Text = "Choose columns";
+                    choose.Left = 18;
+                    choose.Top = 30;
+                    choose.Width = 135;
+                    choose.Height = 34;
+                    choose.Click += delegate { dialog.DialogResult = DialogResult.Yes; dialog.Close(); };
+                    dialog.Controls.Add(choose);
+
+                    Button add = new Button();
+                    add.Text = "Add property";
+                    add.Left = 167;
+                    add.Top = 30;
+                    add.Width = 135;
+                    add.Height = 34;
+                    add.Click += delegate { dialog.DialogResult = DialogResult.No; dialog.Close(); };
+                    dialog.Controls.Add(add);
+
+                    DialogResult result = dialog.ShowDialog(this);
+                    if (result == DialogResult.Yes)
+                        ChooseColumns();
+                    else if (result == DialogResult.No)
+                        AddNewPropertyColumn();
+                }
+            }
+
+            private void ShowBulkEditDialog()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Bulk Edit";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(460, 185);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Label propertyLabel = new Label();
+                    propertyLabel.Text = "Property";
+                    propertyLabel.Left = 24;
+                    propertyLabel.Top = 18;
+                    propertyLabel.Width = 180;
+                    dialog.Controls.Add(propertyLabel);
+
+                    ComboBox propertyBox = new ComboBox();
+                    propertyBox.Left = 24;
+                    propertyBox.Top = 40;
+                    propertyBox.Width = 190;
+                    propertyBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                    propertyBox.Items.Add("Description");
+                    propertyBox.Items.Add("BOM Part Number");
+                    foreach (string name in visibleCustomPropertyNames)
+                        if (!propertyBox.Items.Contains(name)) propertyBox.Items.Add(name);
+                    if (propertyBox.Items.Count > 0) propertyBox.SelectedIndex = 0;
+                    dialog.Controls.Add(propertyBox);
+
+                    Label valueLabel = new Label();
+                    valueLabel.Text = "Value";
+                    valueLabel.Left = 232;
+                    valueLabel.Top = 18;
+                    valueLabel.Width = 180;
+                    dialog.Controls.Add(valueLabel);
+
+                    ComboBox valueBox = new ComboBox();
+                    valueBox.Left = 232;
+                    valueBox.Top = 40;
+                    valueBox.Width = 200;
+                    valueBox.DropDownStyle = ComboBoxStyle.DropDown;
+                    dialog.Controls.Add(valueBox);
+
+                    propertyBox.SelectedIndexChanged += delegate
+                    {
+                        valueBox.Items.Clear();
+                        string property = Convert.ToString(propertyBox.SelectedItem);
+                        foreach (string option in dropdownSettings.GetOptions(property))
+                            valueBox.Items.Add(option);
+                        valueBox.Text = string.Empty;
+                    };
+                    valueBox.Items.Clear();
+                    foreach (string option in dropdownSettings.GetOptions(Convert.ToString(propertyBox.SelectedItem)))
+                        valueBox.Items.Add(option);
+
+                    Label scopeLabel = new Label();
+                    scopeLabel.Text = "Apply to";
+                    scopeLabel.Left = 24;
+                    scopeLabel.Top = 86;
+                    scopeLabel.Width = 80;
+                    dialog.Controls.Add(scopeLabel);
+
+                    ComboBox scopeBox = new ComboBox();
+                    scopeBox.Left = 92;
+                    scopeBox.Top = 81;
+                    scopeBox.Width = 160;
+                    scopeBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                    scopeBox.Items.AddRange(new object[] { "Selected rows", "Checked rows", "All rows" });
+                    scopeBox.SelectedIndex = GetSelectedGridRows().Count > 1 ? 0 : 1;
+                    dialog.Controls.Add(scopeBox);
+
+                    Button apply = new Button();
+                    apply.Text = "Apply";
+                    apply.Left = 262;
+                    apply.Top = 126;
+                    apply.Width = 80;
+                    apply.DialogResult = DialogResult.OK;
+                    dialog.Controls.Add(apply);
+
+                    Button cancel = new Button();
+                    cancel.Text = "Cancel";
+                    cancel.Left = 352;
+                    cancel.Top = 126;
+                    cancel.Width = 80;
+                    cancel.DialogResult = DialogResult.Cancel;
+                    dialog.Controls.Add(cancel);
+
+                    dialog.AcceptButton = apply;
+                    dialog.CancelButton = cancel;
+
+                    if (dialog.ShowDialog(this) != DialogResult.OK)
+                        return;
+
+                    string displayName = Convert.ToString(propertyBox.SelectedItem);
+                    string columnName = GetGridColumnNameFromDisplayName(displayName);
+                    string value = valueBox.Text == null ? string.Empty : valueBox.Text.Trim();
+                    if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(value))
+                        return;
+
+                    List<DataGridViewRow> targetRows = GetRowsByScope(scopeBox.SelectedIndex);
+                    if (targetRows.Count == 0)
+                    {
+                        MessageBox.Show("No rows are selected for the bulk edit.", "Cabin Tools", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+
+                    foreach (DataGridViewRow row in targetRows)
+                    {
+                        row.Cells[columnName].Value = value;
+                        row.Cells[ApplyColumnName].Value = true;
+                        row.Cells[StatusColumnName].Value = "Ready to apply";
+                    }
+
+                    dropdownSettings.LearnOption(displayName, value);
+                    dropdownSettings.Save();
+                }
+            }
+
+            private void ShowNumberDialog()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - BOM Numbering";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(410, 220);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Label startLabel = new Label();
+                    startLabel.Text = "Start";
+                    startLabel.Left = 24;
+                    startLabel.Top = 20;
+                    startLabel.Width = 80;
+                    dialog.Controls.Add(startLabel);
+
+                    TextBox startBox = new TextBox();
+                    startBox.Left = 24;
+                    startBox.Top = 42;
+                    startBox.Width = 120;
+                    startBox.Text = "0001";
+                    dialog.Controls.Add(startBox);
+
+                    Button maxButton = new Button();
+                    maxButton.Text = "Use max + 1";
+                    maxButton.Left = 158;
+                    maxButton.Top = 40;
+                    maxButton.Width = 110;
+                    maxButton.Click += delegate { startBox.Text = GetMaxPlusOneText(); };
+                    dialog.Controls.Add(maxButton);
+
+                    CheckBox overwriteBox = new CheckBox();
+                    overwriteBox.Text = "Overwrite existing numbers";
+                    overwriteBox.Left = 24;
+                    overwriteBox.Top = 82;
+                    overwriteBox.Width = 220;
+                    dialog.Controls.Add(overwriteBox);
+
+                    CheckBox includeDerivedBox = new CheckBox();
+                    includeDerivedBox.Text = "Include derived configurations";
+                    includeDerivedBox.Left = 24;
+                    includeDerivedBox.Top = 108;
+                    includeDerivedBox.Width = 240;
+                    dialog.Controls.Add(includeDerivedBox);
+
+                    Label scopeLabel = new Label();
+                    scopeLabel.Text = "Number";
+                    scopeLabel.Left = 24;
+                    scopeLabel.Top = 142;
+                    scopeLabel.Width = 70;
+                    dialog.Controls.Add(scopeLabel);
+
+                    ComboBox scopeBox = new ComboBox();
+                    scopeBox.Left = 92;
+                    scopeBox.Top = 137;
+                    scopeBox.Width = 165;
+                    scopeBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                    scopeBox.Items.AddRange(new object[] { "Selected rows", "Checked rows", "All rows" });
+                    scopeBox.SelectedIndex = GetSelectedGridRows().Count > 1 ? 0 : 1;
+                    dialog.Controls.Add(scopeBox);
+
+                    Button ok = new Button();
+                    ok.Text = "Number";
+                    ok.Left = 228;
+                    ok.Top = 176;
+                    ok.Width = 80;
+                    ok.DialogResult = DialogResult.OK;
+                    dialog.Controls.Add(ok);
+
+                    Button cancel = new Button();
+                    cancel.Text = "Cancel";
+                    cancel.Left = 318;
+                    cancel.Top = 176;
+                    cancel.Width = 70;
+                    cancel.DialogResult = DialogResult.Cancel;
+                    dialog.Controls.Add(cancel);
+
+                    dialog.AcceptButton = ok;
+                    dialog.CancelButton = cancel;
+
+                    if (dialog.ShowDialog(this) != DialogResult.OK)
+                        return;
+
+                    List<DataGridViewRow> targetRows = GetRowsByScope(scopeBox.SelectedIndex);
+                    FillBomNumbersForRows(targetRows, startBox.Text, overwriteBox.Checked, includeDerivedBox.Checked);
+                }
+            }
+
+            private void ShowOrderDialog()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Configuration Order";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(320, 120);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Button up = new Button();
+                    up.Text = "Move up";
+                    up.Left = 30;
+                    up.Top = 32;
+                    up.Width = 120;
+                    up.Click += delegate { MoveSelectedRows(-1); dialog.Close(); };
+                    dialog.Controls.Add(up);
+
+                    Button down = new Button();
+                    down.Text = "Move down";
+                    down.Left = 168;
+                    down.Top = 32;
+                    down.Width = 120;
+                    down.Click += delegate { MoveSelectedRows(1); dialog.Close(); };
+                    dialog.Controls.Add(down);
+                }
+            }
+
+            private List<DataGridViewRow> GetRowsByScope(int scopeIndex)
+            {
+                List<DataGridViewRow> result = new List<DataGridViewRow>();
+                if (scopeIndex == 0)
+                {
+                    result = GetSelectedGridRows();
+                }
+                else if (scopeIndex == 1)
+                {
+                    foreach (DataGridViewRow row in grid.Rows)
+                        if (!row.IsNewRow && IsRowChecked(row)) result.Add(row);
+                }
+                else
+                {
+                    foreach (DataGridViewRow row in grid.Rows)
+                        if (!row.IsNewRow) result.Add(row);
+                }
+                return result;
+            }
+
+            private void FillBomNumbersForRows(List<DataGridViewRow> targetRows, string startText, bool overwriteExisting, bool includeDerived)
+            {
+                if (targetRows == null || targetRows.Count == 0)
+                {
+                    MessageBox.Show("No rows are selected for numbering.", "Cabin Tools", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                string cleanStart = (startText ?? string.Empty).Trim();
+                int current;
+                if (string.IsNullOrWhiteSpace(cleanStart) || !int.TryParse(cleanStart, out current))
+                {
+                    MessageBox.Show("Start must contain digits only.", "Cabin Tools", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                int width = cleanStart.Length;
+                targetRows.Sort(delegate(DataGridViewRow a, DataGridViewRow b) { return a.Index.CompareTo(b.Index); });
+
+                foreach (DataGridViewRow row in targetRows)
+                {
+                    ConfigurationInfo info = row.Tag as ConfigurationInfo;
+                    if (info != null && info.IsDerived && !includeDerived)
+                    {
+                        row.Cells[StatusColumnName].Value = "Skipped - derived";
+                        continue;
+                    }
+
+                    if (!overwriteExisting && !string.IsNullOrWhiteSpace(CellText(row, BomPartNumberColumnName)))
+                        continue;
+
+                    row.Cells[BomPartNumberColumnName].Value = current.ToString(new string('0', width));
+                    row.Cells[ApplyColumnName].Value = true;
+                    row.Cells[StatusColumnName].Value = "Ready to apply";
+                    current++;
+                }
+            }
+
+            private string GetMaxPlusOneText()
+            {
+                int max = 0;
+                int width = 1;
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    string text = CellText(row, BomPartNumberColumnName);
+                    int number;
+                    if (int.TryParse(text, out number))
+                    {
+                        if (number > max) max = number;
+                        if (text.Length > width) width = text.Length;
+                    }
+                }
+                return (max + 1).ToString(new string('0', width));
+            }
+
+            private void CaptureGridValuesToInfos()
+            {
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (row.IsNewRow) continue;
+                    ConfigurationInfo info = row.Tag as ConfigurationInfo;
+                    if (info == null) continue;
+                    info.PendingName = CellText(row, ConfigurationColumnName);
+                    info.Description = CellText(row, DescriptionColumnName);
+                    info.BomPartNumber = CellText(row, BomPartNumberColumnName);
+                    foreach (string propertyName in visibleCustomPropertyNames)
+                        info.CustomProperties[propertyName] = CellText(row, propertyName);
+                }
+            }
+
+            private void MoveSelectedRows(int direction)
+            {
+                List<DataGridViewRow> selected = GetSelectedGridRows();
+                if (selected.Count == 0)
+                    return;
+
+                CaptureGridValuesToInfos();
+                List<ConfigurationInfo> selectedInfos = new List<ConfigurationInfo>();
+                foreach (DataGridViewRow row in selected)
+                {
+                    ConfigurationInfo info = row.Tag as ConfigurationInfo;
+                    if (info != null && !selectedInfos.Contains(info)) selectedInfos.Add(info);
+                }
+
+                if (direction < 0)
+                {
+                    for (int i = 1; i < configurations.Count; i++)
+                    {
+                        if (selectedInfos.Contains(configurations[i]) && !selectedInfos.Contains(configurations[i - 1]))
+                        {
+                            ConfigurationInfo temp = configurations[i - 1];
+                            configurations[i - 1] = configurations[i];
+                            configurations[i] = temp;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = configurations.Count - 2; i >= 0; i--)
+                    {
+                        if (selectedInfos.Contains(configurations[i]) && !selectedInfos.Contains(configurations[i + 1]))
+                        {
+                            ConfigurationInfo temp = configurations[i + 1];
+                            configurations[i + 1] = configurations[i];
+                            configurations[i] = temp;
+                        }
+                    }
+                }
+
+                BuildGrid();
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    ConfigurationInfo info = row.Tag as ConfigurationInfo;
+                    if (info != null && selectedInfos.Contains(info)) row.Selected = true;
+                }
+                statusLabel.Text = "Editor order updated. Bulk numbering follows this order.";
             }
 
             private void AddTextColumn(string name, string header, int width, bool readOnly)
@@ -652,41 +1047,7 @@ namespace SolidDNA
                 column.ReadOnly = readOnly;
                 grid.Columns.Add(column);
             }
-
-            private void ReloadPropertySelector()
-            {
-                string current = propertySelector.SelectedItem == null ? string.Empty : propertySelector.SelectedItem.ToString();
-                propertySelector.Items.Clear();
-                propertySelector.Items.Add("Description");
-                propertySelector.Items.Add("BOM Part Number");
-                foreach (string name in visibleCustomPropertyNames)
-                {
-                    if (!IsReservedGridPropertyName(name))
-                        propertySelector.Items.Add(name);
-                }
-
-                if (!string.IsNullOrWhiteSpace(current) && propertySelector.Items.Contains(current))
-                    propertySelector.SelectedItem = current;
-                else if (propertySelector.Items.Count > 0)
-                    propertySelector.SelectedIndex = 0;
-                UpdateValueOptions();
-            }
-
-            private void UpdateValueOptions()
-            {
-                valueSelector.Items.Clear();
-                string propertyName = GetSelectedPropertyDisplayName();
-                foreach (string option in dropdownSettings.GetOptions(propertyName))
-                    valueSelector.Items.Add(option);
-                valueSelector.Text = string.Empty;
-            }
-
-            private string GetSelectedPropertyDisplayName()
-            {
-                return propertySelector.SelectedItem == null ? string.Empty : propertySelector.SelectedItem.ToString();
-            }
-
-            private string GetGridColumnNameFromDisplayName(string displayName)
+private string GetGridColumnNameFromDisplayName(string displayName)
             {
                 if (string.Equals(displayName, "Description", StringComparison.OrdinalIgnoreCase))
                     return DescriptionColumnName;
@@ -694,42 +1055,14 @@ namespace SolidDNA
                     return BomPartNumberColumnName;
                 return displayName;
             }
-
-            private void SetSelectedColumnValueSmart()
-            {
-                RowTargetScope scope = ResolveRowTargetScope("Set Value");
-                if (scope == RowTargetScope.Cancelled)
-                    return;
-                SetSelectedColumnValue(scope == RowTargetScope.AllRows);
-            }
-
-            private void ClearSelectedColumnSmart()
-            {
-                RowTargetScope scope = ResolveRowTargetScope("Clear Column");
-                if (scope == RowTargetScope.Cancelled)
-                    return;
-                ClearSelectedColumn(scope == RowTargetScope.AllRows);
-            }
-
-            private void ApplyRowsSmart()
+private void ApplyRowsSmart()
             {
                 RowTargetScope scope = ResolveRowTargetScope("Apply");
                 if (scope == RowTargetScope.Cancelled)
                     return;
                 ApplyRows(scope == RowTargetScope.AllRows);
             }
-
-            private void FillBomNumbersSmart()
-            {
-                RowTargetScope scope = ResolveRowTargetScope("Fill BOM Numbers");
-                if (scope == RowTargetScope.Cancelled)
-                    return;
-
-                bool blanksOnly = overwriteBomNumbersCheckBox == null || !overwriteBomNumbersCheckBox.Checked;
-                FillBomNumbers(scope == RowTargetScope.AllRows, blanksOnly);
-            }
-
-            private RowTargetScope ResolveRowTargetScope(string operationName)
+private RowTargetScope ResolveRowTargetScope(string operationName)
             {
                 int totalRows = CountRealRows();
                 if (totalRows == 0)
@@ -821,128 +1154,12 @@ namespace SolidDNA
 
             private void ToggleAllApply()
             {
-                List<DataGridViewRow> targetRows = GetSelectedGridRows();
-                bool usingSelection = targetRows.Count > 1;
-
-                if (!usingSelection)
-                {
-                    targetRows = new List<DataGridViewRow>();
-                    foreach (DataGridViewRow row in grid.Rows)
-                    {
-                        if (!row.IsNewRow)
-                            targetRows.Add(row);
-                    }
-                }
-
-                if (targetRows.Count == 0)
-                    return;
-
-                bool allTargetRowsChecked = true;
-                foreach (DataGridViewRow row in targetRows)
-                {
-                    if (!IsRowChecked(row))
-                    {
-                        allTargetRowsChecked = false;
-                        break;
-                    }
-                }
-
-                bool newValue = !allTargetRowsChecked;
-                foreach (DataGridViewRow row in targetRows)
-                {
-                    if (!row.IsNewRow)
-                        row.Cells[ApplyColumnName].Value = newValue;
-                }
+                GridCheckBehavior.ToggleSelectedThenAll(
+                    grid,
+                    IsRowChecked,
+                    (row, value) => row.Cells[ApplyColumnName].Value = value);
             }
-
-            private void SetSelectedColumnValue(bool allRows)
-            {
-                string displayName = GetSelectedPropertyDisplayName();
-                string columnName = GetGridColumnNameFromDisplayName(displayName);
-                string value = valueSelector.Text == null ? string.Empty : valueSelector.Text.Trim();
-                if (string.IsNullOrWhiteSpace(displayName) || !grid.Columns.Contains(columnName))
-                    return;
-
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    if (row.IsNewRow)
-                        continue;
-                    if (!allRows && !IsRowChecked(row))
-                        continue;
-                    row.Cells[columnName].Value = value;
-                    row.Cells[ApplyColumnName].Value = true;
-                    row.Cells[StatusColumnName].Value = "Edited";
-                }
-
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    dropdownSettings.AddOption(displayName, value);
-                    dropdownSettings.Save();
-                }
-            }
-
-            private void ClearSelectedColumn(bool allRows)
-            {
-                string displayName = GetSelectedPropertyDisplayName();
-                string columnName = GetGridColumnNameFromDisplayName(displayName);
-                if (string.IsNullOrWhiteSpace(displayName) || !grid.Columns.Contains(columnName))
-                    return;
-
-                DialogResult result = MessageBox.Show(
-                    "This will set column '" + displayName + "' to a blank value.\r\n\r\nRows affected: " + (allRows ? "all rows" : "checked rows") + ".",
-                    "Cabin Tools - Clear Configuration Column",
-                    MessageBoxButtons.OKCancel,
-                    MessageBoxIcon.Warning);
-
-                if (result != DialogResult.OK)
-                    return;
-
-                int cleared = 0;
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    if (row.IsNewRow)
-                        continue;
-                    if (!allRows && !IsRowChecked(row))
-                        continue;
-
-                    ConfigurationInfo info = row.Tag as ConfigurationInfo;
-                    if (info == null)
-                        continue;
-
-                    try
-                    {
-                        if (columnName == DescriptionColumnName)
-                        {
-                            SetTextProperty(info.PropertyManager, "Description", string.Empty);
-                        }
-                        else if (columnName == BomPartNumberColumnName)
-                        {
-                            if (info.Configuration != null)
-                            {
-                                info.Configuration.AlternateName = string.Empty;
-                                info.Configuration.UseAlternateNameInBOM = false;
-                            }
-                        }
-                        else
-                        {
-                            SetTextProperty(info.PropertyManager, displayName, string.Empty);
-                        }
-
-                        row.Cells[columnName].Value = string.Empty;
-                        row.Cells[StatusColumnName].Value = "Cleared " + displayName;
-                        cleared++;
-                    }
-                    catch (Exception ex)
-                    {
-                        row.Cells[StatusColumnName].Value = "! " + ex.Message;
-                    }
-                }
-
-                ForceRebuild();
-                statusLabel.Text = "Cleared " + displayName + " on " + cleared + " configuration(s).";
-            }
-
-            private void ApplyRows(bool allRows)
+private void ApplyRows(bool allRows)
             {
                 CabinCustomPropertyStore.EnsureCanWrite(modelDoc);
 
@@ -999,6 +1216,7 @@ namespace SolidDNA
 
                             info.Configuration.Name = newConfigurationName;
                             info.Name = newConfigurationName;
+                            info.PendingName = newConfigurationName;
                             info.PropertyManager = GetConfigurationPropertyManager(modelDoc, newConfigurationName);
                             row.Cells[ConfigurationColumnName].Value = newConfigurationName;
                             writes++;
@@ -1013,12 +1231,6 @@ namespace SolidDNA
 
                         if (!string.IsNullOrWhiteSpace(bomPartNumber))
                         {
-                            if (!overwriteBomNumbersCheckBox.Checked && !string.IsNullOrWhiteSpace(info.BomPartNumber) &&
-                                !string.Equals(info.BomPartNumber, bomPartNumber, StringComparison.OrdinalIgnoreCase))
-                            {
-                                throw new InvalidOperationException("Existing BOM part number is protected. Enable overwrite to replace it.");
-                            }
-
                             if (!requestedBomNumbers.Add(bomPartNumber))
                                 throw new InvalidOperationException("Duplicate requested BOM part number: " + bomPartNumber);
 
@@ -1074,75 +1286,7 @@ namespace SolidDNA
                 object value = row.Cells[columnName].Value;
                 return value == null ? string.Empty : Convert.ToString(value).Trim();
             }
-
-            private void SetStartToMaxPlusOne()
-            {
-                int max = 0;
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    string text = CellText(row, BomPartNumberColumnName);
-                    int number;
-                    if (TryParseDigits(text, out number) && number > max)
-                        max = number;
-                }
-                startNumberTextBox.Text = (max + 1).ToString();
-            }
-
-            private void FillBomNumbers(bool allRows, bool blanksOnly)
-            {
-                int current;
-                if (!int.TryParse(startNumberTextBox.Text.Trim(), out current))
-                {
-                    MessageBox.Show("Start number must be numeric.", "Cabin Tools", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-
-                int digits = (int)digitCountBox.Value;
-                string prefix = prefixTextBox.Text ?? string.Empty;
-                string suffix = suffixTextBox.Text ?? string.Empty;
-
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    if (row.IsNewRow)
-                        continue;
-                    if (!allRows && !IsRowChecked(row))
-                        continue;
-                    if (blanksOnly && !string.IsNullOrWhiteSpace(CellText(row, BomPartNumberColumnName)))
-                        continue;
-
-                    ConfigurationInfo info = row.Tag as ConfigurationInfo;
-                    if (info != null &&
-                        info.IsDerived &&
-                        includeDerivedInBulkNumberingCheckBox != null &&
-                        !includeDerivedInBulkNumberingCheckBox.Checked)
-                    {
-                        row.Cells[StatusColumnName].Value = "Skipped - derived configuration";
-                        continue;
-                    }
-
-                    string number = prefix + current.ToString(new string('0', digits)) + suffix;
-                    row.Cells[BomPartNumberColumnName].Value = number;
-                    row.Cells[ApplyColumnName].Value = true;
-                    row.Cells[StatusColumnName].Value = "BOM number filled";
-                    current++;
-                }
-            }
-
-            private bool TryParseDigits(string text, out int number)
-            {
-                number = 0;
-                if (string.IsNullOrWhiteSpace(text))
-                    return false;
-                StringBuilder digits = new StringBuilder();
-                foreach (char c in text)
-                {
-                    if (char.IsDigit(c))
-                        digits.Append(c);
-                }
-                return digits.Length > 0 && int.TryParse(digits.ToString(), out number);
-            }
-
-            private void ChooseColumns()
+private void ChooseColumns()
             {
                 List<string> selectableNames = new List<string>();
                 foreach (string name in allCustomPropertyNames)
@@ -1162,6 +1306,7 @@ namespace SolidDNA
                 {
                     if (form.ShowDialog(this) != DialogResult.OK)
                         return;
+                    CaptureGridValuesToInfos();
                     visibleCustomPropertyNames.Clear();
                     foreach (string name in form.SelectedColumns)
                     {
@@ -1185,6 +1330,7 @@ namespace SolidDNA
                     MessageBox.Show("That property is already handled by a fixed column.", "Cabin Tools", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
+                CaptureGridValuesToInfos();
                 if (!ContainsIgnoreCase(allCustomPropertyNames, propertyName))
                     allCustomPropertyNames.Add(propertyName);
                 if (!ContainsIgnoreCase(visibleCustomPropertyNames, propertyName))

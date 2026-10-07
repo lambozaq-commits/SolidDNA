@@ -1,11 +1,9 @@
 using System;
 using System.IO;
 using CADBooster.SolidDna;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-
-using SwEnvironment =
-    CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -34,6 +32,7 @@ namespace SolidDNA
         public bool WasResolved { get; set; }
         public bool IsLinked { get; set; }
         public int Type { get; set; }
+        public bool Exists { get; set; }
     }
 
     /// <summary>
@@ -52,7 +51,7 @@ namespace SolidDNA
             try
             {
                 ISldWorks application =
-                    SwEnvironment.Application.UnsafeObject;
+                    IApplication.UnsafeObject;
 
                 if (application == null)
                     return null;
@@ -170,7 +169,7 @@ namespace SolidDNA
             bool wasResolved;
             bool linked;
 
-            propertyManager.Get6(
+            int getResult = propertyManager.Get6(
                 propertyName,
                 false,
                 out rawValue,
@@ -189,7 +188,8 @@ namespace SolidDNA
                 ResolvedValue = resolvedValue ?? string.Empty,
                 WasResolved = wasResolved,
                 IsLinked = linked,
-                Type = propertyType
+                Type = propertyType,
+                Exists = getResult != (int)swCustomInfoGetResult_e.swCustomInfoGetResult_NotPresent
             };
         }
 
@@ -246,6 +246,27 @@ namespace SolidDNA
             if (modelDoc == null)
             {
                 return "No SOLIDWORKS document is active.";
+            }
+
+            try
+            {
+                if (modelDoc.IsOpenedViewOnly())
+                {
+                    return
+                        "The active document is still loading or is open in view-only mode. " +
+                        "Open it fully before editing properties.";
+                }
+                if (modelDoc.IsOpenedReadOnly())
+                {
+                    return
+                        "The active document is open read-only. " +
+                        "In SOLIDWORKS PDM, check out the file before editing properties.";
+                }
+            }
+            catch
+            {
+                // Continue with the file-system check for older/intermittent
+                // document states where SOLIDWORKS does not return this flag.
             }
 
             string documentPath =

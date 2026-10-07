@@ -83,6 +83,8 @@
       <Private>True</Private>
       <Private>True</Private>
     </Reference>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Net.Http, Version=4.1.1.3, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Net.Http.4.3.4\lib\net46\System.Net.Http.dll</HintPath>
       <Private>True</Private>
@@ -126,12 +128,24 @@
   <ItemGroup>
     <Compile Include="CabinCustomPropertyStore.cs" />
     <Compile Include="CabinPropertyRules.cs" />
+    <Compile Include="PropertyPaneModels.cs" />
+    <Compile Include="PropertyPaneSettingsService.cs" />
+    <Compile Include="PropertyPaneWorkbookService.cs" />
+    <Compile Include="PropertyPaneServices.cs" />
+    <Compile Include="PropertyPaneDialogs.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="GridCheckBehavior.cs" />
+    <Compile Include="DocumentQualitySaveCommand.cs" />
     <Compile Include="CabinToolsTaskpaneHost.cs">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="CutListProfilePropertyCommand.cs" />
     <Compile Include="ConfigurationPartNumberCommand.cs" />
     <Compile Include="AssemblyConfigurationManagerCommand.cs" />
+    <Compile Include="AssemblyConfigurationMatrixForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="RoomLayoutAssemblyReorderCommand.cs" />
     <Compile Include="SheetFormatForm.cs">
       <SubType>Form</SubType>
@@ -146,7 +160,6 @@
     </Compile>
     <Compile Include="PropertyOrganizerCommand.cs" />
     <Compile Include="SheetFormatCommand.cs" />
-    <Compile Include="AutoArrangeBalloonsCommand.cs" />
     <Compile Include="SolidDnaAddIn.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SolidDnaPlugin.cs" />
@@ -281,9 +294,31 @@
     <Content Include="Resources\UtilitiesFlyout128.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+
+    <Content Include="Resources\ImageQuality20.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\ImageQuality32.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\ImageQuality40.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\ImageQuality64.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\ImageQuality96.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\ImageQuality128.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\AdvanceSave20.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\AdvanceSave32.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\AdvanceSave40.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\AdvanceSave64.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\AdvanceSave96.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="Resources\AdvanceSave128.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
+  <Target Name="DeployCabinToolsToProgramData" AfterTargets="Build" Condition="Exists('C:\\ProgramData\\CabinTools')">
+    <Message Text="Cabin Tools: deploying $(TargetDir) to C:\ProgramData\CabinTools" Importance="high" />
+    <ItemGroup>
+      <CabinToolsDeployFiles Include="$(TargetDir)**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CabinToolsDeployFiles)" DestinationFiles="@(CabinToolsDeployFiles->'C:\ProgramData\CabinTools\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" ContinueOnError="WarnAndContinue" />
+    <WriteLinesToFile File="C:\ProgramData\CabinTools\DEPLOYED_BUILD.txt" Lines="Cabin Tools v3.10.2 - $(Configuration) - $(TargetPath)" Overwrite="true" ContinueOnError="WarnAndContinue" />
+  </Target>
 </Project>

@@ -138,6 +138,11 @@ namespace SolidDNA
                     resourcesDirectory,
                     "UtilitiesFlyout{0}.png");
 
+            string imageQualityIconPathFormat =
+                Path.Combine(
+                    resourcesDirectory,
+                    "ImageQuality{0}.png");
+
             if (!HasCompleteIconSet(
                     commandIconPathFormat,
                     mainIconPathFormat,
@@ -145,7 +150,8 @@ namespace SolidDNA
                     propertiesFlyoutIconPathFormat,
                     exportFlyoutIconPathFormat,
                     drawingFlyoutIconPathFormat,
-                    utilitiesFlyoutIconPathFormat))
+                    utilitiesFlyoutIconPathFormat,
+                    imageQualityIconPathFormat))
             {
                 // Keep the add-in usable if a deployment misses resource files.
                 // Flyouts require icon-list resources, so fall back to a simple
@@ -172,7 +178,7 @@ namespace SolidDNA
                         commandIconPathFormat,
                     tooltip: "Cabin Tools",
                     hint:
-                        "One Shortcut Bar dropdown containing Cabin property, export, drawing, and assembly tools.",
+                        "One Shortcut Bar dropdown containing image-quality, save, property, export, drawing, and assembly tools.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -187,6 +193,26 @@ namespace SolidDNA
                 WriteStartupWarning(
                     "Cabin Tools Shortcut Bar flyout was not created.");
             }
+
+            CommandManagerFlyout imageQualityFlyout =
+                commandManager.CreateFlyoutGroup2(
+                    title: "Image Quality",
+                    items: CreateImageQualityCommands(),
+                    mainIconPathFormat:
+                        imageQualityIconPathFormat,
+                    iconListsPathFormat:
+                        commandIconPathFormat,
+                    tooltip: "Image quality",
+                    hint:
+                        "Set shaded image quality to Low 10%, Medium 50%, or High 100%.",
+                    tabView:
+                        CommandManagerItemTabView
+                            .IconWithTextBelow,
+                    type:
+                        CommandManagerFlyoutType
+                            .ExpandOnly);
+
+            CommandManagerItem saveCommand = CreateSaveCommand();
 
             CommandManagerFlyout propertiesFlyout =
                 commandManager.CreateFlyoutGroup2(
@@ -266,6 +292,9 @@ namespace SolidDNA
                 commandManagerItems:
                     new List<ICommandManagerItem>
                     {
+                        imageQualityFlyout,
+                        saveCommand,
+                        new CommandManagerSeparator(),
                         propertiesFlyout,
                         new CommandManagerSeparator(),
                         exportFlyout,
@@ -376,6 +405,8 @@ namespace SolidDNA
             // Important: These are fresh CommandManagerItem instances. Do not
             // reuse the same mutable objects in the categorized CommandManager
             // tab flyouts.
+            items.AddRange(CreateImageQualityCommands());
+            items.Add(CreateSaveCommand());
             items.AddRange(CreatePropertyCommands());
             items.AddRange(CreateExportCommands());
             items.AddRange(CreateDrawingCommands());
@@ -389,6 +420,15 @@ namespace SolidDNA
         {
             List<ICommandManagerItem> items =
                 new List<ICommandManagerItem>();
+
+            AddItems(
+                items,
+                CreateImageQualityCommands());
+
+            items.Add(CreateSaveCommand());
+
+            items.Add(
+                new CommandManagerSeparator());
 
             AddItems(
                 items,
@@ -430,6 +470,70 @@ namespace SolidDNA
                 item.ImageIndex = 0;
                 target.Add(item);
             }
+        }
+
+        private static List<CommandManagerItem>
+            CreateImageQualityCommands()
+        {
+            return new List<CommandManagerItem>
+            {
+                new CommandManagerItem
+                {
+                    Name = "Low 10%",
+                    Tooltip = "Low image quality (10%).",
+                    Hint = "Set shaded image quality to 10%.",
+                    ImageIndex = 5,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick = DocumentQualitySaveCommand.SetLowImageQuality,
+                    OnStateCheck = args =>
+                        args.Result = CabinToolsCommandState.ForPartOrAssembly()
+                },
+                new CommandManagerItem
+                {
+                    Name = "Medium 50%",
+                    Tooltip = "Medium image quality (50%).",
+                    Hint = "Set shaded image quality to 50%.",
+                    ImageIndex = 5,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick = DocumentQualitySaveCommand.SetMediumImageQuality,
+                    OnStateCheck = args =>
+                        args.Result = CabinToolsCommandState.ForPartOrAssembly()
+                },
+                new CommandManagerItem
+                {
+                    Name = "High 100%",
+                    Tooltip = "High image quality (100%).",
+                    Hint = "Set shaded image quality to 100%.",
+                    ImageIndex = 5,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick = DocumentQualitySaveCommand.SetHighImageQuality,
+                    OnStateCheck = args =>
+                        args.Result = CabinToolsCommandState.ForPartOrAssembly()
+                }
+            };
+        }
+
+        private static CommandManagerItem CreateSaveCommand()
+        {
+            return new CommandManagerItem
+            {
+                Name = "Advanced Save",
+                Tooltip = "Advanced Save",
+                Hint = "Advanced Save",
+                ImageIndex = 6,
+                VisibleForDrawings = true,
+                VisibleForAssemblies = true,
+                VisibleForParts = true,
+                OnClick = DocumentQualitySaveCommand.AdvancedSave,
+                OnStateCheck = args =>
+                    args.Result = CabinToolsCommandState.ForSupportedDocument()
+            };
         }
 
         private static List<CommandManagerItem>
@@ -507,9 +611,9 @@ namespace SolidDNA
                 {
                     Name = "Assembly Configuration Manager",
                     Tooltip =
-                        "Change referenced configurations for assembly component instances.",
+                        "Assign component configurations across assembly configurations.",
                     Hint =
-                        "Scan assembly components, use SOLIDWORKS selection to check rows, choose target configurations, then apply to active/checked/all assembly configurations.",
+                        "Choose component configurations, then apply to this, selected, or all assembly configurations.",
                     ImageIndex = 1,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
@@ -541,6 +645,19 @@ namespace SolidDNA
                         args.Result =
                             CabinToolsCommandState
                                 .ForAssembly()
+                },
+                new CommandManagerItem
+                {
+                    Name = "Assembly Configuration Matrix",
+                    Tooltip = "Inspect and edit component state in each assembly configuration.",
+                    Hint = "Select an assembly configuration, stage component changes, and apply without closing the matrix.",
+                    ImageIndex = 1,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick = AssemblyConfigurationManagerCommand.ShowMatrix,
+                    OnStateCheck = args =>
+                        args.Result = CabinToolsCommandState.ForAssembly()
                 }
             };
         }
@@ -611,26 +728,6 @@ namespace SolidDNA
                     OnClick =
                         SheetFormatCommand
                             .ShowSheetFormatForm,
-                    OnStateCheck = args =>
-                        args.Result =
-                            CabinToolsCommandState
-                                .ForDrawing()
-                },
-
-                new CommandManagerItem
-                {
-                    Name = "Auto Arrange Balloons",
-                    Tooltip =
-                        "Create and arrange BOM balloons for the selected drawing view.",
-                    Hint =
-                        "Select one drawing view, then create one arranged balloon per visible referenced component/file-configuration group. No magnetic lines are used.",
-                    ImageIndex = 4,
-                    VisibleForDrawings = true,
-                    VisibleForAssemblies = true,
-                    VisibleForParts = true,
-                    OnClick =
-                        AutoArrangeBalloonsCommand
-                            .RunAutoArrangeBalloons,
                     OnStateCheck = args =>
                         args.Result =
                             CabinToolsCommandState

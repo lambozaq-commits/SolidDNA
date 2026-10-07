@@ -1,0 +1,1876 @@
+CABIN TOOLS — UI ARCHITECTURE, CONTINUATION STANDARD, AND TOOL LOGIC
+Baseline: v3.11.0 property-and-dimension task-pane source / current Cabin Tools direction
+Purpose: Handoff/reference document for continuing development without losing the established UI and workflow principles.
+
+======================================================================
+1. PURPOSE OF THIS DOCUMENT
+======================================================================
+
+This document describes:
+
+1) How the current Cabin Tools user interface is structured.
+2) The UI principles that future Cabin Tools features must follow.
+3) The shared interaction logic that should remain consistent across tools.
+4) The functional logic behind each current tool.
+5) The safety, persistence, reporting, and SOLIDWORKS/PDM rules that should guide future development.
+
+The central design principle is:
+
+    THE LANDING PAGE MUST BE SIMPLE.
+    ADVANCED OR INFREQUENT CHOICES SHOULD APPEAR ONLY AFTER THE USER ASKS FOR THEM.
+
+The UI should behave more like a clean SOLIDWORKS workflow than like a large engineering settings panel.
+
+======================================================================
+2. CURRENT CABIN TOOLS ARCHITECTURE
+======================================================================
+
+Cabin Tools is a SolidWorks add-in built on CAD-Booster SolidDNA.
+
+Main architectural layers:
+
+A. SolidDnaPlugin
+   - Registers the Cabin Tools CommandManager tab.
+   - Registers flyouts and commands.
+   - Registers the single all-tools flyout intended for the S-key Shortcut Bar.
+   - Creates/refreshes the Cabin Tools taskpane.
+   - Centralizes command enabled/disabled state by active document type.
+
+B. Individual command classes
+   Examples:
+   - ConfigurationPartNumberCommand
+   - CutListProfilePropertyCommand
+   - ConfigurationNeutralExportCommand
+   - AssemblyConfigurationManagerCommand
+   - RoomLayoutAssemblyReorderCommand
+   - DocumentQualitySaveCommand
+   - PropertyOrganizerCommand
+   - SheetFormatCommand
+   - PdfExportCommand
+
+C. Shared services / rules
+   Examples:
+   - CabinCustomPropertyStore
+   - CabinPropertyRules / CabinPropertyService
+   - GridCheckBehavior
+   - property dropdown settings
+   - local settings/report storage
+
+D. WinForms UI
+   - Main tools use standard Windows forms.
+   - Large data sets use DataGridView.
+   - Secondary choices are moved to popup dialogs.
+   - The forms intentionally avoid a large number of visible controls.
+
+======================================================================
+3. CABIN TOOLS COMMANDMANAGER / TOOLBAR STRUCTURE
+======================================================================
+
+The Cabin Tools tab is intended to be organized from frequent, direct actions to grouped specialist tools.
+
+Current intended structure:
+
+    Image Quality ▼
+    Save / Advanced Save
+    --------------------
+    Properties ▼
+    --------------------
+    Export ▼
+    --------------------
+    Drawing ▼
+    --------------------
+    Assembly Tools ▼
+
+The user may also manually place SOLIDWORKS PDM commands such as:
+
+    Check Out
+    Check In
+    Undo Check Out
+
+near the beginning of the same toolbar.
+
+The Cabin Tools add-in should not overwrite the user's manually customized PDM toolbar controls.
+
+The all-tools "Cabin Tools" flyout is registered separately for the S-key Shortcut Bar. It is not intended to appear as another redundant button on the normal Cabin Tools tab.
+
+The S-key Cabin Tools flyout should contain the actual work commands directly, not utilities such as connection tests.
+
+----------------------------------------------------------------------
+3.1 TOOLBAR CONTINUATION STANDARD
+----------------------------------------------------------------------
+
+When adding new commands:
+
+- Add them to the logical category only.
+- Do not create extra categories unless a real workflow group exists.
+- Do not duplicate the same command in multiple visible places unnecessarily.
+- Keep stable command IDs and COM GUIDs once users have customized SOLIDWORKS.
+- Keep the S-key flyout as one compact list of actual work tools.
+- Utility/debug commands should remain hidden from the normal user workflow.
+
+======================================================================
+4. GLOBAL UI DESIGN LANGUAGE
+======================================================================
+
+Every future Cabin Tools form should follow these rules.
+
+----------------------------------------------------------------------
+4.1 LANDING PAGE RULE
+----------------------------------------------------------------------
+
+The first form should show only:
+
+- the minimum context the user needs;
+- the main table/list, when applicable;
+- 1–4 frequent controls;
+- the primary action.
+
+Do NOT put every possible setting on the landing page.
+
+Bad pattern:
+    Choose columns
+    Add property
+    Refresh
+    Set value
+    Set selected
+    Set all
+    Clear selected
+    Clear all
+    Include derived
+    Prefix
+    Suffix
+    Apply scope
+    etc.
+
+Preferred pattern:
+    Edit...
+    Number...
+    Check / uncheck all
+    [table]
+    Apply
+
+Clicking Edit..., Number..., Export..., Apply..., etc. can open a second dialog containing the specific options needed for that operation.
+
+----------------------------------------------------------------------
+4.2 PROGRESSIVE DISCLOSURE
+----------------------------------------------------------------------
+
+Use popup dialogs for secondary decisions.
+
+Examples already established:
+
+Export Configurations:
+    Export...
+        -> STEP AP203 / IGES / ACIS
+        -> output folder
+        -> overwrite / skip if needed
+
+Assembly Configuration Manager:
+    Apply
+        -> Active / All / Specific...
+
+Configuration Property Editor:
+    Edit...
+        -> Columns / Bulk values / Clear property
+
+This pattern should continue.
+
+----------------------------------------------------------------------
+4.3 MINIMIZE EXPLANATORY TEXT
+----------------------------------------------------------------------
+
+Do not put paragraphs of instructions at the top of tools.
+
+Preferred:
+    clear title
+    short status
+    intuitive controls
+
+Use:
+- tooltips,
+- concise status text,
+- popup clarification,
+- confirmation dialogs
+
+instead of permanent instructions.
+
+----------------------------------------------------------------------
+4.4 BUTTON NAMING
+----------------------------------------------------------------------
+
+Buttons should be short verbs or short verb phrases.
+
+Good:
+    Edit...
+    Number...
+    Order...
+    Apply
+    Export...
+    Change...
+    Reorder...
+    Show
+    Undo
+
+The ellipsis "..." means the button opens another decision/input dialog.
+
+Avoid:
+    Rebuild, clean the document view, and save
+    Apply preset to all checked rows
+    Add/update property to all
+
+Those descriptions belong in tooltips, not button captions.
+
+----------------------------------------------------------------------
+4.5 CLOSE BUTTONS
+----------------------------------------------------------------------
+
+Do not add a Close button automatically.
+
+If the normal window X provides a clear exit and there is no special commit/cancel state, the X is sufficient.
+
+A Cancel button is appropriate inside a small modal decision dialog.
+
+----------------------------------------------------------------------
+4.6 STATUS TEXT
+----------------------------------------------------------------------
+
+Status should answer one practical question:
+
+    What is the current state/result?
+
+Examples:
+    Ready
+    3 values required
+    6 configurations
+    Updated 5, skipped 1, failed 0
+    Reorder completed
+
+Avoid long diagnostic paragraphs on the main form.
+
+Detailed technical information belongs in:
+- a report file;
+- a tooltip;
+- a popup;
+- the row Status column.
+
+----------------------------------------------------------------------
+4.7 COLOR LOGIC
+----------------------------------------------------------------------
+
+Use consistent semantics:
+
+White / normal:
+    Ready / normal row.
+
+Light yellow:
+    Ambiguous match, multiple match, warning, or user attention.
+
+Light red:
+    Failed operation or blocked row.
+
+Error result dialog:
+    light-red background when one or more operations failed.
+
+Do not use colors decoratively. They should communicate state.
+
+----------------------------------------------------------------------
+4.8 FILE PATH DISPLAY
+----------------------------------------------------------------------
+
+On forms, show the filename, not the complete path.
+
+Example:
+    Reference file: Assembly order - Room Layout.txt
+
+Put the full path in a tooltip if needed.
+
+This applies to:
+- room-layout order reference files;
+- property-order reference files;
+- similar remembered source files.
+
+----------------------------------------------------------------------
+4.9 VERSION LABELS
+----------------------------------------------------------------------
+
+Do not show implementation versions such as:
+
+    [3.9.2]
+    [3.10.0]
+
+in normal form titles.
+
+Version information can exist internally, in README files, build metadata, or diagnostic logs.
+
+======================================================================
+5. STANDARD TABLE / CHECKBOX BEHAVIOR
+======================================================================
+
+This is one of the most important Cabin Tools standards.
+
+The shared GridCheckBehavior logic should be used by every table-based tool that has a Check / uncheck all button.
+
+Selection and checking are different:
+
+- Blue row selection = temporary user selection.
+- Apply/Export checkbox = persistent operation inclusion state.
+
+----------------------------------------------------------------------
+5.1 REQUIRED CHECK / UNCHECK SEQUENCE
+----------------------------------------------------------------------
+
+When the user deliberately selects several rows, but not the entire table:
+
+FIRST PRESS:
+    Check only the selected rows.
+
+SECOND PRESS:
+    If those selected rows are already checked and other rows are still unchecked,
+    check the entire table.
+
+THIRD PRESS:
+    If the entire table is checked,
+    uncheck the entire table.
+
+Then the cycle starts again.
+
+Example:
+
+Initial:
+    rows 4–8 selected
+    table partly checked
+
+Press 1:
+    rows 4–8 become checked
+
+Press 2:
+    all rows become checked
+
+Press 3:
+    all rows become unchecked
+
+If there is no deliberate multi-row subset selection:
+
+    button behaves as normal Check All / Uncheck All.
+
+----------------------------------------------------------------------
+5.2 DIRECT CHECKBOX EDITING
+----------------------------------------------------------------------
+
+Where possible, changing a checkbox on one of several selected rows should propagate the same state to the selected group.
+
+This follows familiar SOLIDWORKS/Windows multi-selection behavior.
+
+----------------------------------------------------------------------
+5.3 THIS BEHAVIOR MUST BE CONSISTENT
+----------------------------------------------------------------------
+
+The same logic is intended for:
+
+- Export Configurations
+- Configuration Property Editor
+- Cut-List Property Editor
+- Assembly Configuration Manager
+- future table-based Cabin Tools features
+
+Do not implement a separate checkbox interpretation in each form unless there is a strong technical reason.
+
+======================================================================
+6. EMPTY VALUE AND CLEARING RULE
+======================================================================
+
+For property editors:
+
+    EMPTY CELL = DO NOT CHANGE THE EXISTING PROPERTY.
+
+This is a safety rule.
+
+A blank visible cell must not silently delete the existing SOLIDWORKS property.
+
+Intentional clearing must be a separate explicit operation such as:
+
+    Edit...
+        -> Clear property
+            -> property
+            -> Checked Only / All
+
+This rule applies to:
+- configuration properties;
+- cut-list properties;
+- future property editors.
+
+======================================================================
+7. TOOL LOGIC — IMAGE QUALITY
+======================================================================
+
+Purpose:
+Set model tessellation/shaded image quality quickly from the Cabin Tools toolbar.
+
+Current presets:
+
+    Low     = 10%
+    Medium  = 50%
+    High    = 100%
+
+Current underlying logic:
+
+1. Get active SOLIDWORKS document.
+2. Require a Part or Assembly.
+3. For an assembly:
+   - read the current "Apply to all referenced part documents" image-quality setting;
+   - temporarily enable it because SOLIDWORKS requires it for assembly-level propagation.
+4. Call SetTessellationQuality with:
+       10
+       50
+       100
+5. Redraw graphics.
+6. Restore the user's previous "Apply to all referenced part documents" toggle.
+
+Important:
+- It changes shaded tessellation quality.
+- It does not automatically save the document.
+- It does not currently change the separate wireframe / high-quality HLR-HLV setting.
+
+Latest UI direction:
+- Use the supplied image/picture icon for Image Quality.
+- Keep the three quality options in the Image Quality flyout.
+- Do not expose technical preference names to the user.
+
+======================================================================
+8. TOOL LOGIC — ADVANCED SAVE
+======================================================================
+
+Current code basis:
+DocumentQualitySaveCommand, derived from the user's Advanced Rebuild macro.
+
+Current source still internally uses the name "Save" / ModifiedRebuildAndSave in places.
+The intended final user-facing command name is:
+
+    Advanced Save
+
+The supplied save-with-check icon should be used for this command.
+
+----------------------------------------------------------------------
+8.1 CURRENT IMPLEMENTED CORE
+----------------------------------------------------------------------
+
+The current implementation performs:
+
+PART / ASSEMBLY:
+1. Normal rebuild.
+2. Force rebuild.
+3. Attempt to remove active model Section View.
+4. Switch to FeatureManager Design Tree.
+5. Hide All Types.
+6. Collapse FeatureManager tree using the keyboard collapse command.
+7. Set Isometric view.
+8. Zoom to fit.
+9. Save active document silently.
+
+DRAWING:
+1. Normal rebuild.
+2. Force rebuild.
+3. Activate each drawing sheet and Zoom to Fit.
+4. Return to the first sheet.
+5. Switch to FeatureManager Design Tree.
+6. Hide All Types.
+7. Collapse FeatureManager tree.
+8. Save active drawing silently.
+
+The save operation reports SOLIDWORKS save errors/warnings if the save fails.
+
+----------------------------------------------------------------------
+8.2 LATEST REQUIRED CONTINUATION
+----------------------------------------------------------------------
+
+The latest requested Advanced Save behavior should additionally ensure:
+
+1. Section View is off where technically applicable.
+2. Hide All Types is on.
+3. FeatureManager Design Tree is the active left-side tab.
+4. Model display is Shaded With Edges where technically applicable.
+5. Feature tree is collapsed.
+6. Normal rebuild and force rebuild both run.
+7. Parts/assemblies end in Isometric.
+8. View is fitted.
+9. Document is saved.
+
+The logical implementation order should be:
+
+    validate document
+    -> rebuild
+    -> force rebuild
+    -> remove section view
+    -> FeatureManager tab
+    -> hide all types
+    -> set Shaded With Edges for model documents
+    -> collapse tree
+    -> set Isometric for part/assembly
+    -> fit view / fit drawing sheets
+    -> save
+
+For drawings, do not force an isometric model orientation on the drawing sheet itself.
+Use drawing-appropriate cleanup: all sheets fit, first sheet restored, FeatureManager active, tree collapsed, save.
+
+Important keyboard note:
+The proven earlier macro used Shift+C for collapsing the FeatureManager tree.
+The latest wording referenced Ctrl+C.
+Do not blindly change the shortcut; use the SOLIDWORKS command that actually collapses the tree in the user's installation, or a direct API command if one becomes reliable.
+
+======================================================================
+9. TOOL LOGIC — PROPERTY CHECKER
+======================================================================
+
+Purpose:
+Standardize the order and presence of GENERAL document custom properties.
+
+Scope:
+- Part
+- Assembly
+- Drawing
+- General custom properties only
+- Does not reorder configuration-specific properties
+- Does not reorder cut-list properties
+
+----------------------------------------------------------------------
+9.1 UI
+----------------------------------------------------------------------
+
+Minimal intended landing page:
+
+    Property Checker
+
+    Reference file: Properties.txt                    [Change...]
+
+    Ready
+    or
+    3 values required
+
+                                                [Reorder...]
+
+No long property-position dump should be shown.
+
+No:
+- Reload Source
+- Check Only
+- Close
+- giant property report on the form
+
+----------------------------------------------------------------------
+9.2 SOURCE FILE LOGIC
+----------------------------------------------------------------------
+
+The selected Properties.txt path is remembered.
+
+The UI shows only the filename.
+The full path can be shown as a tooltip.
+
+The property-order source supports:
+
+    [CabinToolsPriority]
+    Description
+    Brand
+    Model
+    ...
+    [/CabinToolsPriority]
+
+Blank lines and comment lines are ignored.
+
+Supported comments:
+    #
+    //
+    ;
+
+If the marked section is not present, legacy fallback behavior can read the first priority entries from the file.
+
+----------------------------------------------------------------------
+9.3 REORDER LOGIC
+----------------------------------------------------------------------
+
+When Reorder... is clicked:
+
+1. Analyze current general custom properties.
+2. Determine:
+   - missing priority properties;
+   - blank priority values;
+   - current order;
+   - whether the document can be written.
+3. If values are missing/blank:
+   - open a small "Missing property values" dialog;
+   - allow the user to enter values.
+4. Ask for confirmation.
+5. Create a local backup report.
+6. Build the desired property order:
+   - priority properties first, in reference-file order;
+   - all other general properties retained afterward in relative order.
+7. Add missing priority properties.
+8. Apply supplied nonblank values.
+9. Rewrite the general property list.
+10. Verify priority order.
+11. Force rebuild.
+12. Do NOT save automatically.
+13. Tell the user to review and save manually.
+
+Failure behavior:
+- attempt restoration of original properties;
+- keep backup report for recovery.
+
+======================================================================
+10. TOOL LOGIC — CONFIGURATION PROPERTY EDITOR
+======================================================================
+
+Purpose:
+Bulk-manage configuration-level data for parts and assemblies.
+
+Editable items:
+
+- Configuration name
+- Configuration-specific custom property "Description"
+  (the $PRP-style configuration property, not only native IConfiguration.Description)
+- SOLIDWORKS BOM Part Number
+- Specification1
+- other selected configuration-specific custom properties
+
+----------------------------------------------------------------------
+10.1 LANDING PAGE
+----------------------------------------------------------------------
+
+The intended compact landing page is:
+
+    [Edit...] [Number...] [Order...] [Check / uncheck all]
+
+    --------------------------------------------------------------
+    Apply | Configuration | Description ($PRP) | BOM Part Number |
+           selected property columns ...             | Status
+    --------------------------------------------------------------
+
+                                                        [Apply]
+
+Derived configurations:
+- no dedicated Derived column;
+- visually indent the configuration name;
+- optional dimmed text can reinforce hierarchy.
+
+No permanent:
+- Prefix
+- Suffix
+- separate Digits field
+- Refresh Configurations
+- derived checkbox column
+- instruction paragraph
+
+----------------------------------------------------------------------
+10.2 EDIT... LOGIC
+----------------------------------------------------------------------
+
+Edit... opens a small second dialog:
+
+    Columns
+    Bulk values
+    Clear property
+
+Columns:
+- choose which configuration-specific property columns are visible;
+- add a new property column.
+
+Bulk values:
+- choose property;
+- enter/select value;
+- select scope:
+      Selected rows
+      Checked rows
+      All rows
+- mark affected rows for Apply.
+
+Clear property:
+- choose property;
+- choose Checked Only or All;
+- explicitly set that property to blank on Apply.
+
+----------------------------------------------------------------------
+10.3 BOM NUMBERING LOGIC
+----------------------------------------------------------------------
+
+Number... opens BOM Numbering.
+
+Starting-number format is inferred directly from the entered value.
+
+Example:
+    Start = 0001
+    -> 0001, 0002, 0003, 0004...
+
+Example:
+    Start = 001
+    -> 001, 002, 003...
+
+No separate Digits control is needed.
+
+Options:
+- Use max + 1
+- Overwrite existing numbers
+- Include derived configurations
+- scope:
+      Selected rows
+      Checked rows
+      All rows
+
+Default safety:
+- derived configurations are skipped unless explicitly included;
+- existing numbers are preserved unless overwrite is selected.
+
+BOM Part Number is written through:
+    IConfiguration.AlternateName
+    IConfiguration.UseAlternateNameInBOM = true
+
+This matches the SOLIDWORKS Configuration Properties "Part number displayed when used in a bill of materials" behavior.
+
+----------------------------------------------------------------------
+10.4 CONFIGURATION ORDER LOGIC
+----------------------------------------------------------------------
+
+Order... allows:
+    Move up
+    Move down
+
+Important:
+This changes Cabin Tools editor order and therefore bulk-numbering order.
+
+It does NOT claim to manually drag/drop the native SOLIDWORKS ConfigurationManager tree unless a supported SOLIDWORKS API method is available.
+
+----------------------------------------------------------------------
+10.5 APPLY LOGIC
+----------------------------------------------------------------------
+
+For each target row:
+
+1. Validate configuration exists.
+2. If configuration name changed:
+   - reject blank name;
+   - reject duplicate configuration name;
+   - rename configuration.
+3. Write nonblank configuration Description.
+4. Write nonblank BOM Part Number.
+5. Write nonblank visible custom properties.
+6. Leave blank cells unchanged unless Clear Property was explicitly used.
+7. Update row Status.
+8. Create report.
+9. Force rebuild.
+10. Do not silently save unless the user uses Advanced Save later.
+
+======================================================================
+11. TOOL LOGIC — CUT-LIST PROPERTY EDITOR
+======================================================================
+
+Purpose:
+Edit weldment/cut-list item names and cut-list custom properties safely.
+
+Document scope:
+    active Part only.
+
+The form is intentionally modeless so the user can still interact with SOLIDWORKS.
+
+----------------------------------------------------------------------
+11.1 LANDING PAGE
+----------------------------------------------------------------------
+
+Compact layout:
+
+    [Edit...] [Check / uncheck all]
+
+    ---------------------------------------------------------------
+    Apply | Cut-list item name | Show | property columns | Status
+    ---------------------------------------------------------------
+
+                                                        [Apply]
+
+No ordering controls.
+Cut-list ordering functionality was intentionally removed.
+
+----------------------------------------------------------------------
+11.2 CUT-LIST SCAN
+----------------------------------------------------------------------
+
+Before reading:
+- attempt to update cut list;
+- traverse cut-list/body-folder features;
+- collect real body-containing cut-list items;
+- read all available cut-list property names;
+- deduplicate the usable items.
+
+The tool should not invent extra phantom cut-list rows.
+
+----------------------------------------------------------------------
+11.3 SHOW BUTTON
+----------------------------------------------------------------------
+
+Each row has a Show button.
+
+Show:
+1. clears current selection;
+2. selects the bodies belonging to that cut-list item;
+3. falls back to selecting the cut-list feature if needed;
+4. zooms to selection.
+
+This is the preferred way to identify a cut-list item visually.
+
+----------------------------------------------------------------------
+11.4 EDIT... LOGIC
+----------------------------------------------------------------------
+
+Edit... opens:
+
+    Columns
+    Bulk values
+    Clear property
+
+Columns:
+- choose visible cut-list property columns;
+- add a new property.
+
+Bulk values:
+Default bulk fields:
+    Description
+    Brand
+    Model
+
+Optional extra field:
+    Extra property = value
+
+Default remembered dropdown values include:
+
+Description:
+    Top Profile
+    Bottom Profile
+    Ceiling Profile
+    Decorative Profile
+
+Brand:
+    SBA
+    Banco
+
+Model:
+    Type 121
+    TPL 27
+    TPL 28
+    TDB 22
+    TDB 23
+
+User-entered dropdown values are learned and persisted for future use.
+
+----------------------------------------------------------------------
+11.5 PROPERTY COLUMN LOGIC
+----------------------------------------------------------------------
+
+The tool reads all existing cut-list properties.
+
+The user chooses which of them are shown as columns.
+
+When a new property is added:
+- it becomes a real column;
+- it is not hidden in a generic "Extra properties" text cell.
+
+Empty cell:
+    unchanged.
+
+Explicit clear:
+    required to write blank.
+
+----------------------------------------------------------------------
+11.6 CUT-LIST WRITE LOGIC
+----------------------------------------------------------------------
+
+Weldment properties can be linked back to the weldment profile/cut-list source.
+
+Therefore the writer uses multiple fallback paths:
+
+1. find existing property name/case;
+2. try unlinking;
+3. Add3 / ReplaceValue;
+4. Set2-style fallback;
+5. read property back;
+6. if value did not stick:
+   - unlink again;
+   - delete old property;
+   - add again using delete-and-add path;
+   - write again.
+7. read back after write.
+
+If SOLIDWORKS still returns a different value:
+- row Status reports failure;
+- do not silently claim success.
+
+After Apply:
+- rebuild;
+- write a report;
+- show updated/skipped/failed counts.
+
+======================================================================
+12. TOOL LOGIC — EXPORT PDFs
+======================================================================
+
+Purpose:
+Batch export one or more SOLIDWORKS drawings to PDF.
+
+The Export menu exposes one command:
+
+    Export PDFs
+
+Clicking it first asks:
+
+    Automatic
+    Manual
+    Cancel
+
+This avoids two separate visible PDF commands.
+
+----------------------------------------------------------------------
+12.1 AUTOMATIC NAMING
+----------------------------------------------------------------------
+
+Automatic naming uses drawing general custom properties.
+
+Established convention:
+
+    (Drawing number)_(Revision) (Cabin type description)(Cabin type defined) - (Layout type).pdf
+
+Example:
+
+    D.520.0044.408.564_A Cabin Compact+ (1) BS - Room Layout.pdf
+
+Required properties include:
+- DrwNumber
+- Revision
+- Cabin type description
+- Cabin type defined
+- Layout type
+
+The established normalization also handles project-specific naming cases such as:
+- removing unwanted separation between B and S where the project naming requires "BS";
+- removing a trailing sheet/layout numeric suffix where the intended exported layout name is simply "Room Layout".
+
+----------------------------------------------------------------------
+12.2 BATCH PDF LANDING PAGE
+----------------------------------------------------------------------
+
+The simplified batch form should contain only the useful workflow:
+
+Top:
+    Add drawings...
+    Remove drawings
+
+Output behavior:
+    One common folder for all drawings
+    or
+    Different folders per drawing
+
+    Existing PDFs: Skip / Overwrite behavior
+
+    Open exported PDFs after export
+    Keep drawings open after export
+
+Near the table:
+    Check Properties
+    Select ready rows
+
+Table:
+    Export
+    Drawing
+    Automatic PDF filename / Manual filename
+    Output folder
+    Folder chooser where needed
+    Status
+
+Bottom:
+    compact readiness summary
+    Export...
+    Cancel only when the workflow needs it
+
+Removed concepts:
+- Add active drawing
+- Clear export selection
+- Use source folders
+- verbose permanent help text
+
+----------------------------------------------------------------------
+12.3 DRAWING LOADING BEHAVIOR
+----------------------------------------------------------------------
+
+Selecting drawing files does not need to visibly open them.
+
+For actual PDF creation, SOLIDWORKS still has to load the drawing internally.
+
+Cabin Tools should:
+- open/load silently where possible;
+- export;
+- restore previous active document;
+- close internally loaded drawings unless "Keep drawings open" is selected.
+
+----------------------------------------------------------------------
+12.4 OUTPUT FOLDER ASSIGNMENT
+----------------------------------------------------------------------
+
+Folder assignment should use popup scope choices instead of several main-page buttons.
+
+Preferred popup:
+
+    Assign Output Folder to
+
+    All
+    Selected Rows
+    Cancel
+
+"Selected Rows" means the user's checked/selected target set according to the established workflow.
+
+----------------------------------------------------------------------
+12.5 EXPORT SAFETY
+----------------------------------------------------------------------
+
+Before export:
+- validate naming;
+- validate output folder;
+- detect duplicate output paths;
+- apply existing-file policy;
+- mark blocked rows in Status.
+
+After export:
+- report exported/skipped/failed results;
+- save report under CabinTools PDF export reports;
+- optionally open exported PDFs.
+
+======================================================================
+13. TOOL LOGIC — EXPORT CONFIGURATIONS
+======================================================================
+
+Purpose:
+Export each selected configuration of a Part or Assembly as an independent neutral file.
+
+Supported formats:
+
+    STEP AP203
+    IGES
+    ACIS
+
+----------------------------------------------------------------------
+13.1 LANDING PAGE
+----------------------------------------------------------------------
+
+Current clean form:
+
+    Export Configurations
+
+    Document: 017240.SLDASM
+    Description: Desk Set
+
+                         [Check / uncheck all] [Uncheck derived]
+
+    ------------------------------------------------------------
+    Export | Configuration | File name | Status
+    ------------------------------------------------------------
+
+                                         [Export...] [Close/X]
+
+Derived configurations are indented instead of requiring a separate Derived column.
+
+The Status column is user-resizable.
+
+----------------------------------------------------------------------
+13.2 FILE NAMING
+----------------------------------------------------------------------
+
+Naming:
+
+    Document-level Description + ", " + Configuration name
+
+Example:
+
+    Desk Set, Table 10 - Officer Comfort.step
+
+The first part comes from the document-level custom property Description.
+
+It does not use the configuration Description as the document prefix.
+
+----------------------------------------------------------------------
+13.3 DERIVED CONFIGURATION LOGIC
+----------------------------------------------------------------------
+
+Derived configurations are detected using the configuration parent relationship.
+
+UI:
+- derived names are indented;
+- "Uncheck derived" clears their export checkboxes;
+- "Check / uncheck all" can still check everything, including derived configurations.
+
+----------------------------------------------------------------------
+13.4 EXPORT FLOW
+----------------------------------------------------------------------
+
+Export... opens the format choice:
+
+    STEP AP203
+    IGES
+    ACIS
+    Cancel
+
+Then:
+1. choose/reuse output folder;
+2. choose overwrite/skip behavior if needed;
+3. remember original active configuration;
+4. for STEP:
+   - capture current STEP AP setting;
+   - set AP203;
+5. for each checked configuration:
+   - verify configuration still exists;
+   - activate configuration safely;
+   - rebuild;
+   - export via SaveAs to neutral file;
+   - verify output exists;
+   - update row Status.
+6. restore original active configuration;
+7. restore the user's previous STEP preference;
+8. write report;
+9. show result dialog.
+
+If one or more exports fail:
+- final result dialog should be light red;
+- failed row Status should contain the error.
+
+======================================================================
+14. TOOL LOGIC — APPLY SHEET FORMAT
+======================================================================
+
+Purpose:
+Replace external .slddrt sheet formats in an active drawing.
+
+Document scope:
+    Drawing only.
+
+----------------------------------------------------------------------
+14.1 UI PRINCIPLE
+----------------------------------------------------------------------
+
+The tool supports:
+
+1. One selected sheet format applied to all sheets.
+2. Individual sheet format selection per sheet.
+
+The visible "Current sheet format" should show the file name / meaningful format name, not the full path.
+
+Full path can be retained internally or in tooltip.
+
+The important warning should be short and visually clear:
+
+    The selected .slddrt replaces the previous sheet format.
+    Existing sheet-format note changes are not retained.
+
+Avoid long instructional paragraphs.
+
+----------------------------------------------------------------------
+14.2 APPLY LOGIC
+----------------------------------------------------------------------
+
+For each target sheet:
+
+1. activate sheet;
+2. read current sheet properties;
+3. keep existing:
+   - paper size,
+   - scale,
+   - projection,
+   - sheet-level settings;
+4. switch to custom drawing template;
+5. set selected .slddrt path;
+6. ReloadTemplate(false).
+
+ReloadTemplate(false) is deliberate:
+the previous sheet-format content is replaced rather than merging old sheet-format note edits.
+
+After all sheets:
+- force rebuild;
+- restore originally active sheet;
+- write backup report;
+- do not automatically save.
+
+======================================================================
+15. TOOL LOGIC — ASSEMBLY CONFIGURATION MANAGER
+======================================================================
+
+Purpose:
+Change ReferencedConfiguration of top-level assembly component instances.
+
+Scope:
+    active Assembly only.
+
+----------------------------------------------------------------------
+15.1 LANDING PAGE
+----------------------------------------------------------------------
+
+Minimal intended controls:
+
+    Assembly Configuration Manager
+
+    [Check / uncheck all] [Undo] [Apply]
+
+    -----------------------------------------------------------------
+    Apply | Component | Current configuration | Target configuration |
+                                                   Status
+    -----------------------------------------------------------------
+
+No landing-page controls for:
+- Scan Components
+- Use SOLIDWORKS selection
+- Set target
+- Available configurations column
+- assembly-configuration scope
+
+The configuration scope appears only after Apply.
+
+----------------------------------------------------------------------
+15.2 COMPONENT DISPLAY
+----------------------------------------------------------------------
+
+Display:
+
+    Component Description [component instance]
+
+Example:
+
+    Smart Furniture [016914-2]
+
+Do not repeat configuration description in the component label because the Current configuration column already contains the configuration.
+
+Full file path and other technical details can live in the tooltip.
+
+----------------------------------------------------------------------
+15.3 COMPONENT SCAN
+----------------------------------------------------------------------
+
+Read top-level components only.
+
+For each component:
+- instance name;
+- file/path;
+- current referenced configuration;
+- suppression state;
+- available configurations from referenced part/subassembly;
+- best human-readable component description.
+
+Suppressed components remain visible with appropriate Status.
+
+----------------------------------------------------------------------
+15.4 TARGET CONFIGURATION EDITING
+----------------------------------------------------------------------
+
+Target configuration is a combo box populated from that component's referenced document configurations.
+
+Bulk behavior:
+
+If several rows are selected and the user changes one row's Target configuration:
+- propagate that target to selected compatible rows.
+
+If a target does not exist for another selected component:
+- do not silently create a configuration;
+- leave/report incompatibility.
+
+----------------------------------------------------------------------
+15.5 APPLY SCOPE
+----------------------------------------------------------------------
+
+Apply button asks only then:
+
+    Apply in assembly configurations
+
+    Active
+    All
+    Specific...
+
+Specific... opens a checked list.
+
+This keeps the landing page clean.
+
+----------------------------------------------------------------------
+15.6 APPLY LOGIC
+----------------------------------------------------------------------
+
+For each chosen assembly configuration:
+
+1. activate assembly configuration;
+2. rebuild/find live top-level components;
+3. for each checked row:
+   - skip if component is absent;
+   - skip if suppressed;
+   - skip if no target;
+   - fail if target configuration does not exist;
+   - skip if target equals current;
+   - otherwise set IComponent2.ReferencedConfiguration.
+4. force rebuild.
+5. restore original assembly configuration.
+6. refresh row statuses.
+7. tell user to review and save manually.
+
+Important:
+Direct ReferencedConfiguration editing can be overwritten later by a design table if the design table controls that component state.
+
+----------------------------------------------------------------------
+15.7 UNDO LOGIC
+----------------------------------------------------------------------
+
+Undo stores up to a limited number of UI snapshots.
+
+It restores:
+- Apply check state;
+- current/target values represented by the editor;
+- status.
+
+If SOLIDWORKS changes have already been applied, Undo restores the desired target selections in the UI; the user must Apply the restored targets again to write them back into SOLIDWORKS.
+
+======================================================================
+16. TOOL LOGIC — REORDER ROOM LAYOUT ASSEMBLY
+======================================================================
+
+Purpose:
+Reorder top-level room-layout assembly components according to a user-maintained .txt reference list.
+
+This avoids hard-coding the project order inside the add-in.
+
+----------------------------------------------------------------------
+16.1 REFERENCE FILE
+----------------------------------------------------------------------
+
+Format:
+    one desired component/category name per line.
+
+Example:
+
+    Base Tubes
+    Wall Layout
+    Ceiling Layout
+    Cabin door
+    WET UNIT - type
+    Window Box
+    Filler, Cabinet
+    Bed
+    Wardrobe
+    ...
+
+Ignored lines:
+- blank
+- starts with #
+- starts with //
+- starts with ;
+
+The selected file is remembered between sessions.
+
+UI shows:
+    Reference file: Assembly order - Room Layout.txt
+
+Full path is tooltip-only.
+
+----------------------------------------------------------------------
+16.2 LANDING PAGE
+----------------------------------------------------------------------
+
+    Reorder Room Layout Assembly
+
+    Reference file: Assembly order - Room Layout.txt   [Change list...]
+
+    ---------------------------------------------------------------
+    Order | Reference item | Matched top-level component(s) | Status
+    ---------------------------------------------------------------
+
+    compact summary
+
+                                                        [Apply]
+
+The "Current position" column is intentionally removed.
+
+----------------------------------------------------------------------
+16.3 BASIC SKETCH / REFERENCE COMPONENT
+----------------------------------------------------------------------
+
+Basic Sketch / skeleton/reference components are treated as fixed reference anchors.
+
+They:
+- do not need to exist in the order TXT;
+- are not considered normal order items;
+- are kept before the reordered component group;
+- are not moved.
+
+----------------------------------------------------------------------
+16.4 MISSING REFERENCE ITEMS
+----------------------------------------------------------------------
+
+The TXT can contain more items than the current cabin assembly.
+
+If an order-list item is not found:
+- skip it;
+- do not reserve an empty position;
+- the next matched reference item takes the next order position.
+
+This is normal, not an error.
+
+----------------------------------------------------------------------
+16.5 COMPONENT MATCHING
+----------------------------------------------------------------------
+
+Only top-level assembly components are candidates.
+
+Primary identity should be based on human component Description.
+
+Fallback information can include:
+- configuration-specific Description;
+- configuration description;
+- top-level instance name;
+- file name.
+
+Matching must avoid generic false positives.
+
+Established examples:
+- "Bed" must not match "Light, bed".
+- "Table" must not match "Table light".
+- explicit project alias can map "Table" to component Description "Desk".
+
+Multiple components can legitimately match the same reference item.
+
+Example:
+    TV bracket
+        020161-1
+        020161-2
+
+Those should stay together as one ordered group.
+
+----------------------------------------------------------------------
+16.6 APPLY LOGIC
+----------------------------------------------------------------------
+
+1. scan top-level assembly components;
+2. separate fixed reference components;
+3. match reference-list items;
+4. build ordered groups;
+5. keep unmatched normal components after ordered group;
+6. ask for confirmation;
+7. use IAssemblyDoc.ReorderComponents sequentially;
+8. preserve fixed reference components first;
+9. rebuild;
+10. write report;
+11. do not automatically save.
+
+The reorder API has previously produced DISP_E_BADINDEX errors in some versions/workflows, so this feature should always:
+- use concrete IComponent2 references;
+- apply sequentially;
+- report each failed component;
+- avoid claiming success if SOLIDWORKS rejects a move.
+
+======================================================================
+17. TOOL LOGIC — CABIN TOOLS TASKPANE
+======================================================================
+
+The taskpane is a persistent, supplementary editor for the active document.
+It must not replace or become a dependency of the CommandManager tools.
+
+17.1 DOCUMENT CONTEXT
+
+The pane follows the active SOLIDWORKS document:
+
+- Part: part properties plus four cabin dimensions.
+- Assembly: assembly properties only.
+- Drawing: drawing properties and automatic title/number previews.
+- No document: compact "No active document" state.
+- Unsupported document: compact unsupported-document state.
+
+The header shows only the active filename, active configuration where relevant,
+read-only state, and Settings. The pane never edits a referenced component just
+because an assembly is active.
+
+17.2 PROPERTY GROUPS AND FIELDS
+
+Part defaults:
+
+- Class and sub-family: Class, Sub-Family.
+- Other attributes: Brand, Model, Specification1, Reference.
+- General: Material.
+- Drawing properties: Project, Description, DesignBy, DesignDate.
+
+Assembly defaults:
+
+- General: SW-FileName, Description.
+- Cabin: Cabin type description, Cabin type defined, Layout type, Brand, Model.
+- Design and status: DesignBy, DesignDate, Status, Weight.
+
+Drawing defaults:
+
+- Titles: Title2 and Title 3 automatic previews/expressions.
+- Drawing: SW-File Name, cabin fields, Layout Type, DrwNumber, Revision.
+- Design and check: DesignBy, CheckedBy, CheckedDate.
+
+Groups are collapsible. Editable fields use one consistent row layout:
+
+    Label | Value | Scope | Clear
+
+The exact configured SOLIDWORKS property spelling is authoritative. Label changes
+must not rename properties. In particular, preserve SW-FileName / SW-File Name,
+Layout type / Layout Type, Title2 / Title 3, and DrwNumber exactly as configured.
+
+17.3 PROPERTY SCOPE AND EFFECTIVE VALUES
+
+Editable part and assembly fields can allow any combination of:
+
+- Document.
+- Active configuration.
+- Selected configurations...
+- All configurations.
+
+Selected configurations open a small selection dialog. Values that differ across
+targets display <varies>. Leaving <varies> untouched preserves every target value.
+
+For Description, a nonblank configuration-specific value has precedence. When it
+is blank, the document-level Description is displayed as inherited. Editing one
+layer must not overwrite the other layer.
+
+17.4 APPLY, RESET, AND CLEAR
+
+Apply:
+
+- validates the complete pending change set before writing;
+- writes only changed fields and dimensions;
+- preserves existing property type and raw expression when no edit is requested;
+- rebuilds once after grouped changes;
+- never saves the SOLIDWORKS document;
+- reports Updated, skipped, and failed counts;
+- attempts restoration after a partial write or rebuild failure.
+
+Reset discards only unsaved pane edits and reloads the current SOLIDWORKS values.
+It does not undo changes already applied to the model. Reset asks before discarding
+pending edits.
+
+Blank fields mean no change by default. Clear is explicit and identifies the exact
+property and current scope. Read-only/automatic fields do not offer Clear unless a
+specific safe override has been enabled.
+
+17.5 DRAWING NUMBER AND TITLES
+
+DrwNumber uses the exact combination of Cabin type description, Cabin type defined,
+and Layout Type. A unique result is shown and written on Apply. No match does not
+invent a number. Conflicting results are reported as ambiguous. Manual override is
+disabled by default and must be enabled in Settings.
+
+Title2 is maintained as the Cabin type description expression. Title 3 is maintained
+as Cabin type defined + " - " + Layout Type. These fields remain automatic/read-only
+in the normal pane.
+
+17.6 PART DIMENSIONS
+
+The Dimensions section is shown for parts only and displays millimetres:
+
+- Bottom elevation: ADJUST Height - Bottom from Steel deck.
+- Height: ADJUST Height - Top from ADJUST Height - Bottom.
+- Width: ADJUST Width - Side from Side.
+- Depth: ADJUST Depth - Front from Back.
+
+The configured names are exact matches. Before enabling a dimension, Cabin Tools
+confirms that both features are reference planes, the controlling feature is an
+offset/distance plane, it references the configured source plane, it is not
+suppressed in any target configuration, and it exposes an editable dimension.
+
+Dimension scopes are Active, Selected..., and All configurations. Values are read
+and written in SOLIDWORKS system units (metres) only at the API boundary; the UI
+always displays mm. Height, Width, and Depth must be finite and greater than zero.
+Bottom elevation may be negative, zero, or positive. Dimensions cannot be cleared.
+
+If a part has a design table, the user receives a warning immediately before any
+dimension write. Missing or invalid dimension geometry disables that dimension but
+does not block property editing.
+
+17.7 SETTINGS AND PROFILE
+
+Settings contains separate Part, Assembly, and Drawing layouts. Users can:
+
+- add, rename, remove, and reorder groups;
+- add, edit, remove, and reorder fields;
+- edit labels independently of exact SOLIDWORKS property names;
+- set control type, list, permitted scopes, default scope, required/read-only state,
+  blank behavior, explicit Clear permission, defaults, validation, tooltips, and
+  simple visibility/enabled rules;
+- edit dropdown lists and the standard property catalog;
+- edit drawing-number mappings and manual override permission;
+- edit dimension feature/reference-plane mappings;
+- import, export, or restore the versioned profile.
+
+The profile is Cabin Tools-owned XML under the established roaming CabinTools
+settings location. Schema 1 profiles migrate to schema 2 with a backup. Invalid or
+newer profiles are preserved for diagnosis and safe defaults are loaded. Reset and
+import create recovery backups. The built-in profile contains the required defaults,
+so Property Tab Builder templates and Cabin Properties.xlsx are not runtime
+dependencies. Shared-workbook loading remains optional and falls back to the local
+profile if unavailable.
+
+17.8 PDM, FAILURE, AND LIFECYCLE SAFETY
+
+Read-only, view-only, checked-in, or otherwise non-writable files remain visible but
+cannot be applied or cleared. Cabin Tools never checks out or saves automatically.
+
+Taskpane creation, settings, refresh, property, dimension, rebuild, and restoration
+failures are logged separately. A taskpane failure must not prevent Advanced Save,
+exports, drawing tools, property tools, or assembly tools from loading. Refresh is
+event-driven and debounced. Re-entrant refresh is blocked while Apply is active, and
+pending user edits are retained if the active document/configuration changes.
+
+Future CommandManager tools must not depend on the taskpane being visible.
+
+======================================================================
+18. SHARED PERSISTENCE / SETTINGS
+======================================================================
+
+Cabin Tools intentionally remembers useful user choices.
+
+Examples:
+
+Property Checker:
+    remembered Properties.txt path.
+
+Room Layout Reorder:
+    remembered order TXT path and directory.
+
+Cut-list / Configuration property editors:
+    remembered visible columns;
+    learned dropdown values.
+
+PDF export:
+    remembered export behavior such as output folder / open-after-export preferences.
+
+Export Configurations:
+    remembered output folder.
+
+General rule:
+Remember repetitive setup that saves time.
+Do not remember destructive or risky choices without making them obvious.
+
+======================================================================
+19. REPORTING STANDARD
+======================================================================
+
+Batch/destructive tools should write reports under a CabinTools folder in the user's Documents area when practical.
+
+Examples:
+- PDF export reports
+- cut-list reports
+- configuration property reports
+- room-layout reorder reports
+- property backup reports
+- sheet-format backup reports
+- configuration neutral export reports
+
+Main form:
+    concise result.
+
+Report:
+    detailed traceability.
+
+======================================================================
+20. SOLIDWORKS / PDM SAFETY RULES
+======================================================================
+
+Before writing:
+
+- validate active document type;
+- verify document is writable;
+- respect checked-out/read-only state;
+- do not silently save unless that tool's explicit purpose is Save/Advanced Save;
+- do not change PDM file references casually;
+- do not rename configurations without duplicate checks;
+- do not overwrite existing BOM numbers unless user explicitly chooses it;
+- do not change design-table-controlled data without warning;
+- do not silently clear blank property cells;
+- restore original active configuration after batch operations;
+- restore user preferences temporarily changed during export.
+
+After operations that can affect model state:
+- rebuild when needed;
+- report failures;
+- preserve user context when practical.
+
+======================================================================
+21. SOLIDWORKS API / INTEROP CODING RULES
+======================================================================
+
+Use the project's actual SolidWorks interop version as the authority.
+
+Common problems already encountered:
+- interface vs concrete COM type mismatches;
+- methods returning object in one interop version;
+- method overload differences;
+- ambiguous System.Environment vs SolidWorks Environment;
+- obsolete SolidWorksEnvironment.Application usage.
+
+Preferred practices:
+
+- use explicit casts where interop returns object;
+- use System.Environment explicitly when needed;
+- prefer IApplication over obsolete SolidWorksEnvironment.Application;
+- avoid assuming an API overload from another SOLIDWORKS release;
+- verify enum values against the referenced interop assembly;
+- keep API failure handling local so one optional UI action does not disable the add-in.
+
+======================================================================
+22. SOURCE / BUILD / DEPLOYMENT STANDARD
+======================================================================
+
+Primary source project:
+    SolidDNA / Cabin Tools source tree
+
+Stable deployed DLL:
+    C:\ProgramData\CabinTools\SolidDNA.dll
+
+Do not register random Debug/Release DLL copies once a stable deployment path is established.
+
+Development flow:
+
+1. Close SOLIDWORKS.
+2. Replace/edit source.
+3. Build > Clean Solution.
+4. Build > Rebuild Solution.
+5. Confirm 0 errors.
+6. Deploy successful build to C:\ProgramData\CabinTools.
+7. Start SOLIDWORKS.
+8. Verify the actual deployed DLL is loaded.
+
+Avoid visible version markers in forms as a permanent solution.
+Use deployment logs, assembly version metadata, or diagnostic tools instead.
+
+======================================================================
+23. REMOVED / RETIRED FEATURES
+======================================================================
+
+These were intentionally removed from the normal Cabin Tools feature set:
+
+- Save Drawings as Previous SOLIDWORKS Version
+- Reference Mate Assistant
+- Auto Arrange Balloons
+- Cut-list ordering / drag-and-drop ordering
+
+Do not reintroduce them accidentally from older replacement packages.
+
+======================================================================
+24. CURRENT UI STYLE — QUICK REFERENCE
+======================================================================
+
+PROPERTY CHECKER
+    Reference file
+    Change...
+    short status
+    Reorder...
+
+CONFIGURATION PROPERTY EDITOR
+    Edit...
+    Number...
+    Order...
+    Check / uncheck all
+    table
+    Apply
+
+CUT-LIST PROPERTY EDITOR
+    Edit...
+    Check / uncheck all
+    table with Show
+    Apply
+
+EXPORT CONFIGURATIONS
+    Check / uncheck all
+    Uncheck derived
+    table
+    Export...
+
+PDF EXPORT
+    mode popup first
+    compact batch form
+    progressive folder/export choices
+    Export...
+
+ASSEMBLY CONFIGURATION MANAGER
+    Check / uncheck all
+    Undo
+    Apply
+    table
+    configuration scope only after Apply
+
+ROOM LAYOUT REORDER
+    reference filename
+    Change list...
+    preview table
+    Apply
+
+IMAGE QUALITY
+    toolbar flyout:
+        Low
+        Medium
+        High
+
+ADVANCED SAVE
+    one direct toolbar command
+
+======================================================================
+25. HOW FUTURE FEATURES SHOULD BE DESIGNED
+======================================================================
+
+Before coding a new feature, answer these questions:
+
+1. What is the ONE main action?
+2. What information must be visible immediately?
+3. Which options are secondary and can be moved behind "..."/Apply?
+4. Does the feature need a table?
+5. If it has checkboxes, can GridCheckBehavior be reused?
+6. Can blank values be dangerous?
+7. What must be remembered between sessions?
+8. What must never be saved automatically?
+9. What report/recovery data is needed?
+10. What happens if SOLIDWORKS rejects one row but accepts the others?
+
+Then design the landing page.
+
+Target:
+    a new user should understand the first action in a few seconds.
+
+Do not solve complexity by putting more controls on the main form.
+Solve complexity with a clear sequence of small decisions.
+
+======================================================================
+26. DEVELOPMENT HANDOFF CHECKLIST
+======================================================================
+
+For every Cabin Tools update:
+
+[ ] Keep existing COM GUIDs and stable command IDs.
+[ ] Do not re-add retired tools.
+[ ] Keep landing page compact.
+[ ] Move secondary choices to popups.
+[ ] Reuse standard Check / uncheck behavior.
+[ ] Use selected-row behavior consistently.
+[ ] Use filenames on screen; full paths in tooltip/report.
+[ ] Do not show version tags in normal titles.
+[ ] Blank property cell means unchanged.
+[ ] Clearing requires explicit command.
+[ ] Derived configurations are visually indented.
+[ ] Restore original configuration after batch operations.
+[ ] Do not silently save except Advanced Save.
+[ ] Keep reports for batch/destructive operations.
+[ ] Keep error dialogs concise.
+[ ] Use light-red result UI when a batch has failures.
+[ ] Verify SolidWorks interop signatures before finalizing.
+[ ] Build with 0 errors.
+[ ] Prefer 0 warnings.
+[ ] Deploy to the stable Cabin Tools DLL location.
+[ ] Verify the deployed DLL, not only the source build.
+
+======================================================================
+27. FINAL DESIGN PRINCIPLE
+======================================================================
+
+Cabin Tools should feel like a native extension of SOLIDWORKS:
+
+    SIMPLE FIRST SCREEN
+    + CONTEXTUAL SECOND STEP
+    + SAFE BULK ACTIONS
+    + CONSISTENT TABLE BEHAVIOR
+    + CLEAR STATUS
+    + MINIMAL CLUTTER
+
+The feature should expose complexity only when the user actually needs it.

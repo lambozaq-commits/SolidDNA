@@ -3,11 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
 using CADBooster.SolidDna;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-
-using SwEnvironment =
-    CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -40,7 +38,7 @@ namespace SolidDNA
         private static IModelDoc2 GetActiveSupportedDocument()
         {
             ISldWorks swApp =
-                SwEnvironment.Application.UnsafeObject;
+                IApplication.UnsafeObject;
 
             if (swApp == null)
             {
@@ -74,7 +72,7 @@ namespace SolidDNA
 
         private static void ShowError(string message)
         {
-            SwEnvironment.Application.ShowMessageBox(
+            IApplication.ShowMessageBox(
                 message,
                 SolidWorksMessageBoxIcon.Stop);
         }
@@ -84,12 +82,9 @@ namespace SolidDNA
     {
         private readonly IModelDoc2 activeDocument;
         private readonly Label sourceLabel;
-        private readonly Label statusLabel;
-        private readonly TextBox reportTextBox;
-        private readonly Button selectSourceButton;
-        private readonly Button reloadButton;
-        private readonly Button checkOnlyButton;
-        private readonly Button repairButton;
+        private readonly Label summaryLabel;
+        private readonly Button reorderButton;
+        private readonly ToolTip toolTip;
 
         private PropertyOrderDefinition sourceDefinition;
 
@@ -98,231 +93,132 @@ namespace SolidDNA
             activeDocument = modelDoc;
 
             Text = "Cabin Tools - Property Checker";
-            StartPosition = FormStartPosition.CenterScreen;
-            Width = 950;
-            Height = 720;
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            Width = 610;
+            Height = 218;
             MinimizeBox = false;
+            MaximizeBox = false;
+            ShowInTaskbar = false;
 
-            TableLayoutPanel mainLayout =
-                new TableLayoutPanel();
+            toolTip = new ToolTip();
 
-            mainLayout.Dock = DockStyle.Fill;
-            mainLayout.Padding = new Padding(12);
-            mainLayout.ColumnCount = 1;
-            mainLayout.RowCount = 4;
+            Label heading = new Label();
+            heading.Text = "Property Checker";
+            heading.Font = new System.Drawing.Font(Font.FontFamily, 11F, System.Drawing.FontStyle.Bold);
+            heading.AutoSize = true;
+            heading.Left = 18;
+            heading.Top = 18;
+            Controls.Add(heading);
 
-            mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.AutoSize));
-
-            mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.AutoSize));
-
-            mainLayout.RowStyles.Add(
-                new RowStyle(
-                    SizeType.Percent,
-                    100));
-
-            mainLayout.RowStyles.Add(
-                new RowStyle(SizeType.AutoSize));
+            Label sourceCaption = new Label();
+            sourceCaption.Text = "Reference file:";
+            sourceCaption.AutoSize = true;
+            sourceCaption.Left = 18;
+            sourceCaption.Top = 62;
+            Controls.Add(sourceCaption);
 
             sourceLabel = new Label();
-            sourceLabel.AutoSize = true;
-            sourceLabel.Text =
-                "Property-order source: not configured.";
+            sourceLabel.AutoEllipsis = true;
+            sourceLabel.Left = 110;
+            sourceLabel.Top = 60;
+            sourceLabel.Width = 330;
+            sourceLabel.Height = 24;
+            sourceLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            Controls.Add(sourceLabel);
 
-            mainLayout.Controls.Add(
-                sourceLabel,
-                0,
-                0);
+            Button changeSourceButton = new Button();
+            changeSourceButton.Text = "Change...";
+            changeSourceButton.Left = 458;
+            changeSourceButton.Top = 56;
+            changeSourceButton.Width = 105;
+            changeSourceButton.Height = 28;
+            changeSourceButton.Click += SelectSourceButton_Click;
+            Controls.Add(changeSourceButton);
 
-            statusLabel = new Label();
-            statusLabel.AutoSize = true;
-            statusLabel.Text =
-                "Scope: General custom properties in the active document.";
+            summaryLabel = new Label();
+            summaryLabel.Left = 18;
+            summaryLabel.Top = 100;
+            summaryLabel.Width = 545;
+            summaryLabel.Height = 28;
+            summaryLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            Controls.Add(summaryLabel);
 
-            mainLayout.Controls.Add(
-                statusLabel,
-                0,
-                1);
+            reorderButton = new Button();
+            reorderButton.Text = "Reorder...";
+            reorderButton.Left = 458;
+            reorderButton.Top = 142;
+            reorderButton.Width = 105;
+            reorderButton.Height = 30;
+            reorderButton.Click += ReorderButton_Click;
+            Controls.Add(reorderButton);
 
-            reportTextBox = new TextBox();
-            reportTextBox.Multiline = true;
-            reportTextBox.ReadOnly = true;
-            reportTextBox.ScrollBars = ScrollBars.Both;
-            reportTextBox.WordWrap = false;
-            reportTextBox.Dock = DockStyle.Fill;
-
-            mainLayout.Controls.Add(
-                reportTextBox,
-                0,
-                2);
-
-            FlowLayoutPanel buttonPanel =
-                new FlowLayoutPanel();
-
-            buttonPanel.FlowDirection =
-                FlowDirection.RightToLeft;
-
-            buttonPanel.Dock = DockStyle.Fill;
-            buttonPanel.AutoSize = true;
-
-            Button closeButton = new Button();
-            closeButton.Text = "Close";
-            closeButton.AutoSize = true;
-            closeButton.DialogResult = DialogResult.Cancel;
-
-            repairButton = new Button();
-            repairButton.Text = "Reorder + Repair";
-            repairButton.AutoSize = true;
-            repairButton.Click += RepairButton_Click;
-
-            checkOnlyButton = new Button();
-            checkOnlyButton.Text = "Check Only";
-            checkOnlyButton.AutoSize = true;
-            checkOnlyButton.Click += CheckOnlyButton_Click;
-
-            reloadButton = new Button();
-            reloadButton.Text = "Reload Source";
-            reloadButton.AutoSize = true;
-            reloadButton.Click += ReloadButton_Click;
-
-            selectSourceButton = new Button();
-            selectSourceButton.Text = "Select Properties.txt...";
-            selectSourceButton.AutoSize = true;
-            selectSourceButton.Click += SelectSourceButton_Click;
-
-            buttonPanel.Controls.Add(closeButton);
-            buttonPanel.Controls.Add(repairButton);
-            buttonPanel.Controls.Add(checkOnlyButton);
-            buttonPanel.Controls.Add(reloadButton);
-            buttonPanel.Controls.Add(selectSourceButton);
-
-            mainLayout.Controls.Add(
-                buttonPanel,
-                0,
-                3);
-
-            Controls.Add(mainLayout);
-
-            CancelButton = closeButton;
-            AcceptButton = checkOnlyButton;
-
-            Load += PropertyOrganizerForm_Load;
+            AcceptButton = reorderButton;
+            Load += delegate { RefreshState(); };
         }
 
-        private void PropertyOrganizerForm_Load(
-            object sender,
-            EventArgs e)
+        private void SelectSourceButton_Click(object sender, EventArgs e)
         {
-            RefreshReport();
-        }
-
-        private void SelectSourceButton_Click(
-            object sender,
-            EventArgs e)
-        {
-            using (OpenFileDialog openDialog =
-                new OpenFileDialog())
+            using (OpenFileDialog openDialog = new OpenFileDialog())
             {
-                openDialog.Title =
-                    "Select Cabin Tools Properties.txt";
-
-                openDialog.Filter =
-                    "Text files (*.txt)|*.txt|All files (*.*)|*.*";
-
+                openDialog.Title = "Select Properties.txt";
+                openDialog.Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*";
                 openDialog.CheckFileExists = true;
                 openDialog.Multiselect = false;
 
-                string savedPath =
-                    PropertyOrderSettings.GetSavedSourceFilePath();
-
+                string savedPath = PropertyOrderSettings.GetSavedSourceFilePath();
                 if (!string.IsNullOrWhiteSpace(savedPath))
                 {
-                    string savedDirectory =
-                        Path.GetDirectoryName(savedPath);
-
-                    if (!string.IsNullOrWhiteSpace(savedDirectory) &&
-                        Directory.Exists(savedDirectory))
-                    {
-                        openDialog.InitialDirectory =
-                            savedDirectory;
-                    }
+                    string savedDirectory = Path.GetDirectoryName(savedPath);
+                    if (!string.IsNullOrWhiteSpace(savedDirectory) && Directory.Exists(savedDirectory))
+                        openDialog.InitialDirectory = savedDirectory;
                 }
 
-                if (openDialog.ShowDialog() != DialogResult.OK)
+                if (openDialog.ShowDialog(this) != DialogResult.OK)
                     return;
 
                 try
                 {
-                    PropertyOrderDefinition definition =
-                        PropertyOrderSource.LoadDefinition(
-                            openDialog.FileName);
-
-                    PropertyOrderSettings.SaveSourceFilePath(
-                        definition.SourcePath);
-
-                    RefreshReport();
+                    PropertyOrderDefinition definition = PropertyOrderSource.LoadDefinition(openDialog.FileName);
+                    PropertyOrderSettings.SaveSourceFilePath(definition.SourcePath);
+                    RefreshState();
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show(
-                        "The selected file could not be used.\n\n" +
-                        ex.Message,
-                        "Cabin Tools - Source File Error",
+                        "The selected file could not be used.\r\n\r\n" + ex.Message,
+                        "Cabin Tools - Source File",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Error);
                 }
             }
         }
 
-        private void ReloadButton_Click(
-            object sender,
-            EventArgs e)
-        {
-            RefreshReport();
-        }
-
-        private void CheckOnlyButton_Click(
-            object sender,
-            EventArgs e)
-        {
-            RefreshReport();
-        }
-
-        private void RepairButton_Click(
-            object sender,
-            EventArgs e)
+        private void ReorderButton_Click(object sender, EventArgs e)
         {
             if (sourceDefinition == null)
             {
                 MessageBox.Show(
-                    "Select a valid Properties.txt source file first.",
+                    "Select a valid property reference file first.",
                     "Cabin Tools",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
-
                 return;
             }
 
             PropertyCheckResult currentCheck;
-
             try
             {
-                currentCheck =
-                    CabinPropertyService.Analyze(
-                        activeDocument,
-                        sourceDefinition);
+                currentCheck = CabinPropertyService.Analyze(activeDocument, sourceDefinition);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    "Could not analyze properties.\n\n" +
-                    ex.Message,
+                    "Could not analyze properties.\r\n\r\n" + ex.Message,
                     "Cabin Tools",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
-
-                RefreshReport();
+                RefreshState();
                 return;
             }
 
@@ -333,14 +229,12 @@ namespace SolidDNA
                     "Cabin Tools - Reorder Blocked",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
-
-                RefreshReport();
+                RefreshState();
                 return;
             }
 
             Dictionary<string, string> suppliedValues =
-                new Dictionary<string, string>(
-                    StringComparer.OrdinalIgnoreCase);
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             if (currentCheck.MissingOrBlankProperties.Count > 0)
             {
@@ -354,71 +248,40 @@ namespace SolidDNA
                         currentCheck.MissingOrBlankProperties,
                         suggestedValues))
                 {
-                    if (missingForm.ShowDialog() !=
-                        DialogResult.OK)
-                    {
+                    if (missingForm.ShowDialog(this) != DialogResult.OK)
                         return;
-                    }
-
                     suppliedValues = missingForm.Values;
                 }
             }
 
-            DialogResult confirmation =
-                MessageBox.Show(
-                    "Reorder + Repair will:\n\n" +
-                    "• Read the priority order from the selected " +
-                    "Properties.txt file\n" +
-                    "• Add missing priority properties as blank " +
-                    "text properties\n" +
-                    "• Apply any non-blank values entered in the " +
-                    "previous form\n" +
-                    "• Delete and recreate only GENERAL custom " +
-                    "properties\n" +
-                    "• Move source-file properties to the top\n" +
-                    "• Keep all other general properties in their " +
-                    "current relative order\n" +
-                    "• Create a local backup report\n\n" +
-                    "Configuration-specific and cut-list properties " +
-                    "are not changed.\n\n" +
-                    "Continue?",
-                    "Cabin Tools - Confirm Property Reorder",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning);
+            DialogResult confirmation = MessageBox.Show(
+                "Reorder general custom properties using " +
+                Path.GetFileName(sourceDefinition.SourcePath) + "?\r\n\r\n" +
+                "A local backup report will be created.",
+                "Cabin Tools - Reorder Properties",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
 
             if (confirmation != DialogResult.Yes)
                 return;
 
             try
             {
-                PropertyRepairResult result =
-                    CabinPropertyService.RepairAndReorder(
-                        activeDocument,
-                        sourceDefinition,
-                        suppliedValues);
-
-                string addedText =
-                    result.AddedProperties.Count == 0
-                        ? "No new priority properties were required."
-                        : "Added: " +
-                          string.Join(
-                              ", ",
-                              result.AddedProperties);
+                PropertyRepairResult result = CabinPropertyService.RepairAndReorder(
+                    activeDocument,
+                    sourceDefinition,
+                    suppliedValues);
 
                 MessageBox.Show(
-                    "Property reorder completed.\n\n" +
-                    addedText +
-                    "\n\nGeneral properties reordered: " +
-                    result.ReorderedPropertyCount.ToString() +
-                    "\n\nBackup report:\n" +
-                    result.BackupFilePath +
-                    "\n\nThe document is now modified. " +
-                    "Review it, then save manually.",
+                    "Property reorder completed.\r\n\r\n" +
+                    "Added: " + result.AddedProperties.Count +
+                    "\r\nReordered: " + result.ReorderedPropertyCount +
+                    "\r\n\r\nReview the document and save manually.",
                     "Cabin Tools",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
 
-                RefreshReport();
+                RefreshState();
             }
             catch (Exception ex)
             {
@@ -427,72 +290,41 @@ namespace SolidDNA
                     "Cabin Tools - Property Reorder Failed",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
-
-                RefreshReport();
+                RefreshState();
             }
         }
 
-        private void RefreshReport()
+        private void RefreshState()
         {
             try
             {
-                sourceDefinition =
-                    PropertyOrderSource.LoadSavedDefinition();
+                sourceDefinition = PropertyOrderSource.LoadSavedDefinition();
+                PropertyCheckResult result = CabinPropertyService.Analyze(activeDocument, sourceDefinition);
 
-                PropertyCheckResult result =
-                    CabinPropertyService.Analyze(
-                        activeDocument,
-                        sourceDefinition);
+                string fileName = Path.GetFileName(sourceDefinition.SourcePath);
+                sourceLabel.Text = fileName;
+                toolTip.SetToolTip(sourceLabel, sourceDefinition.SourcePath);
 
-                sourceLabel.Text =
-                    "Property-order source: " +
-                    sourceDefinition.SourcePath +
-                    "  (updated " +
-                    sourceDefinition.SourceLastWriteTime.ToString(
-                        "yyyy-MM-dd HH:mm:ss") +
-                    ")";
+                int missing = result.MissingOrBlankProperties == null
+                    ? 0
+                    : result.MissingOrBlankProperties.Count;
 
-                reportTextBox.Text = result.BuildReport();
+                summaryLabel.Text = missing == 0
+                    ? "Ready"
+                    : missing + " value" + (missing == 1 ? "" : "s") + " required";
 
-                repairButton.Enabled =
-                    result.CanRepair;
-
-                checkOnlyButton.Enabled = true;
-                reloadButton.Enabled = true;
-
-                statusLabel.Text =
-                    result.CanRepair
-                        ? "Scope: General custom properties in the active " +
-                          result.DocumentTypeName +
-                          ". Reorder + Repair is available."
-                        : "Scope: General custom properties in the active " +
-                          result.DocumentTypeName +
-                          ". Reorder + Repair is blocked: " +
-                          result.RepairBlockReason;
+                reorderButton.Enabled = result.CanRepair;
             }
             catch (Exception ex)
             {
                 sourceDefinition = null;
+                sourceLabel.Text = "Not selected";
+                toolTip.SetToolTip(sourceLabel, string.Empty);
+                summaryLabel.Text = "Select a reference file";
+                reorderButton.Enabled = false;
 
-                sourceLabel.Text =
-                    "Property-order source: not available.";
-
-                reportTextBox.Text =
-                    "Property Checker cannot load the configured " +
-                    "Properties.txt source.\r\n\r\n" +
-                    ex.Message +
-                    "\r\n\r\nClick 'Select Properties.txt...' and choose " +
-                    "the source file from the local PDM template folder. " +
-                    "Use PDM Get Latest on the file when the source order " +
-                    "has been updated.";
-
-                repairButton.Enabled = false;
-                checkOnlyButton.Enabled = true;
-                reloadButton.Enabled = true;
-
-                statusLabel.Text =
-                    "Select a valid Properties.txt source file to enable " +
-                    "Reorder + Repair.";
+                if (!string.IsNullOrWhiteSpace(ex.Message))
+                    toolTip.SetToolTip(summaryLabel, ex.Message);
             }
         }
     }

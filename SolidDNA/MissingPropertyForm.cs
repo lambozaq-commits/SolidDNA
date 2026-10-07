@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 
@@ -35,13 +35,13 @@ namespace SolidDNA
                 new Dictionary<string, TextBox>(
                     StringComparer.OrdinalIgnoreCase);
 
-            Text = "Cabin Tools - Missing Property Values";
+            Text = "Cabin Tools - Missing Property Values [3.9.1]";
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MinimizeBox = false;
             MaximizeBox = false;
-            Width = 760;
-            Height = 580;
+            Width = 620;
+            Height = 520;
 
             TableLayoutPanel mainLayout =
                 new TableLayoutPanel();
@@ -64,12 +64,8 @@ namespace SolidDNA
 
             Label instructionLabel = new Label();
             instructionLabel.AutoSize = true;
-            instructionLabel.Text =
-                "Enter any values currently available. You may leave " +
-                "fields blank. Blank priority properties will still be " +
-                "created or retained blank and moved into the requested " +
-                "order. Existing properties are not overwritten when " +
-                "their entry is left blank.";
+            instructionLabel.Font = new System.Drawing.Font(Font.FontFamily, 10F, System.Drawing.FontStyle.Bold);
+            instructionLabel.Text = "Missing property values";
 
             mainLayout.Controls.Add(
                 instructionLabel,
@@ -160,8 +156,7 @@ namespace SolidDNA
             cancelButton.DialogResult = DialogResult.Cancel;
 
             Button continueButton = new Button();
-            continueButton.Text =
-                "Reorder with Available Values";
+            continueButton.Text = "Reorder";
             continueButton.AutoSize = true;
             continueButton.Click += ContinueButton_Click;
 

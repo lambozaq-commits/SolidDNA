@@ -8,10 +8,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using CADBooster.SolidDna;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-
-using SwEnvironment = CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -40,7 +39,7 @@ namespace SolidDNA
         public static void ShowRoomLayoutAssemblyReorderForm()
         {
             ISldWorks swApp = null;
-            try { swApp = SwEnvironment.Application.UnsafeObject as ISldWorks; } catch { swApp = null; }
+            try { swApp = IApplication.UnsafeObject as ISldWorks; } catch { swApp = null; }
 
             if (swApp == null)
             {
@@ -269,15 +268,12 @@ namespace SolidDNA
             private ToolTip referenceToolTip;
             private Label statusLabel;
             private Button changeListButton;
-            private Button rescanButton;
             private Button applyButton;
-            private Button closeButton;
 
             private const int OrderColumnIndex = 0;
             private const int ReferenceColumnIndex = 1;
             private const int MatchedColumnIndex = 2;
-            private const int CurrentPositionColumnIndex = 3;
-            private const int StatusColumnIndex = 4;
+            private const int StatusColumnIndex = 3;
 
             public RoomLayoutAssemblyReorderForm(
                 ISldWorks swApp,
@@ -376,11 +372,6 @@ namespace SolidDNA
                 matchedColumn.Width = 470;
                 grid.Columns.Add(matchedColumn);
 
-                DataGridViewTextBoxColumn positionColumn = new DataGridViewTextBoxColumn();
-                positionColumn.HeaderText = "Current position";
-                positionColumn.Width = 130;
-                grid.Columns.Add(positionColumn);
-
                 DataGridViewTextBoxColumn statusColumn = new DataGridViewTextBoxColumn();
                 statusColumn.HeaderText = "Status";
                 statusColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
@@ -404,13 +395,9 @@ namespace SolidDNA
                 bottom.WrapContents = false;
                 bottom.Margin = new Padding(0, 8, 0, 0);
 
-                closeButton = CreateButton("Close", delegate { Close(); });
                 applyButton = CreateButton("Apply", delegate { ApplyReorder(); });
-                rescanButton = CreateButton("Refresh preview", delegate { ScanAndPreview(); });
 
-                bottom.Controls.Add(closeButton);
                 bottom.Controls.Add(applyButton);
-                bottom.Controls.Add(rescanButton);
                 root.Controls.Add(bottom, 0, 4);
 
                 Controls.Add(root);
@@ -736,74 +723,95 @@ namespace SolidDNA
                     return best;
 
                 List<string> referenceKeys = BuildReferenceKeys(referenceItem);
-                List<string> fields = new List<string>();
-                AddField(fields, component.BestDescription);
-                AddField(fields, component.DocumentDescription);
-                AddField(fields, component.ConfigurationCustomDescription);
-                AddField(fields, component.ConfigurationDescription);
-                AddField(fields, component.ReferencedConfiguration);
-                AddField(fields, component.TopLevelName);
-                AddField(fields, component.FileName);
-                AddField(fields, component.InstanceName);
+
+                // The room-layout TXT names components by their SOLIDWORKS component
+                // description. Configuration names/descriptions are intentionally not
+                // used as primary identity fields: a configuration can contain words
+                // such as "bed" even when the component itself is "Light, bed".
+                // That previously caused a reference item named "Bed" to match both
+                // the actual Bed and unrelated light components.
+                List<string> primaryFields = new List<string>();
+                AddField(primaryFields, component.DocumentDescription);
+
+                if (primaryFields.Count == 0)
+                    AddField(primaryFields, component.ConfigurationCustomDescription);
+                if (primaryFields.Count == 0)
+                    AddField(primaryFields, component.ConfigurationDescription);
 
                 foreach (string referenceKey in referenceKeys)
                 {
-                    if (string.IsNullOrWhiteSpace(referenceKey))
-                        continue;
-
-                    foreach (string rawField in fields)
+                    foreach (string rawField in primaryFields)
                     {
-                        string field = NormalizeKey(rawField);
-                        if (field.Length == 0)
-                            continue;
-
-                        int score = 0;
-                        if (field.Equals(referenceKey, StringComparison.OrdinalIgnoreCase))
-                        {
-                            score = 120;
-                        }
-                        else if (field.StartsWith(referenceKey, StringComparison.OrdinalIgnoreCase) &&
-                                 !IsDangerouslyGenericReference(referenceItem, rawField))
-                        {
-                            score = 100;
-                        }
-                        else if (referenceKey.StartsWith(field, StringComparison.OrdinalIgnoreCase) && field.Length >= 4)
-                        {
-                            score = 92;
-                        }
-                        else if (component.SearchText.Contains(referenceKey) &&
-                                 !IsDangerouslyGenericReference(referenceItem, rawField))
-                        {
-                            score = 78;
-                        }
-                        else
-                        {
-                            score = TokenOverlapScore(referenceItem, rawField);
-                        }
-
+                        int score = ScoreIdentityField(referenceKey, rawField, true);
                         if (score > best.Score)
                             best.Score = score;
+                    }
+                }
+
+                // Only use component/file names as a fallback if the description did
+                // not provide a confident match. This keeps legacy assemblies usable
+                // without allowing configuration text to create false positives.
+                if (best.Score < 60)
+                {
+                    List<string> fallbackFields = new List<string>();
+                    AddField(fallbackFields, component.TopLevelName);
+                    AddField(fallbackFields, component.FileName);
+                    AddField(fallbackFields, component.InstanceName);
+
+                    foreach (string referenceKey in referenceKeys)
+                    {
+                        foreach (string rawField in fallbackFields)
+                        {
+                            int score = ScoreIdentityField(referenceKey, rawField, false);
+                            if (score > best.Score)
+                                best.Score = score;
+                        }
                     }
                 }
 
                 return best;
             }
 
-            private static bool IsDangerouslyGenericReference(string referenceItem, string candidateField)
+            private static int ScoreIdentityField(string referenceKey, string candidateField, bool descriptionField)
             {
-                List<string> referenceTokens = Tokenize(referenceItem);
+                string field = NormalizeKey(candidateField);
+                if (string.IsNullOrWhiteSpace(referenceKey) || field.Length == 0)
+                    return 0;
+
+                if (field.Equals(referenceKey, StringComparison.OrdinalIgnoreCase))
+                    return descriptionField ? 130 : 95;
+
+                List<string> referenceTokens = Tokenize(referenceKey);
                 List<string> fieldTokens = Tokenize(candidateField);
+                bool genericSingleWord =
+                    referenceTokens.Count == 1 && IsGenericToken(referenceTokens[0]);
 
-                if (referenceTokens.Count != 1 || fieldTokens.Count <= 1)
-                    return false;
+                // Generic one-word items must begin with the same word. This lets
+                // "Bed" match "Bed 990 M" while rejecting "Light, bed".
+                // Table light is an explicit separate component and must never be
+                // captured by the room-layout "Table" reference.
+                if (genericSingleWord)
+                {
+                    if (fieldTokens.Count == 0 ||
+                        !fieldTokens[0].Equals(referenceTokens[0], StringComparison.OrdinalIgnoreCase))
+                        return 0;
 
-                string token = referenceTokens[0];
-                if (token == "table" && fieldTokens.Contains("light"))
-                    return true;
-                if (token == "chair" && fieldTokens.Count > 2)
-                    return false;
+                    if (referenceTokens[0] == "table" && fieldTokens.Contains("light"))
+                        return 0;
+                }
 
-                return IsGenericToken(token);
+                if (field.StartsWith(referenceKey, StringComparison.OrdinalIgnoreCase))
+                    return descriptionField ? 112 : 78;
+
+                // Generic one-word references are never matched by substring/token
+                // overlap after the prefix test above.
+                if (genericSingleWord)
+                    return 0;
+
+                if (descriptionField && referenceKey.Length >= 6 && field.Contains(referenceKey))
+                    return 82;
+
+                return 0;
             }
 
             private static bool IsGenericToken(string token)
@@ -887,6 +895,13 @@ namespace SolidDNA
 
                 if (lower.Contains("window") && lower.Contains("box"))
                     AddKey(keys, NormalizeKey("Window Box"));
+
+                // In the room-layout component library the furniture item called
+                // "Table" in the order list can be described as "Desk ..." in
+                // SOLIDWORKS. Keep this explicit alias instead of fuzzy matching.
+                if (Tokenize(referenceItem).Count == 1 &&
+                    Tokenize(referenceItem).Contains("table"))
+                    AddKey(keys, NormalizeKey("Desk"));
 
                 return keys;
             }
@@ -992,7 +1007,6 @@ namespace SolidDNA
                         row.OrderNumber.ToString("00"),
                         row.ReferenceItem,
                         BuildMatchedText(row),
-                        BuildPositionText(row),
                         row.StatusText);
 
                     DataGridViewRow gridRow = grid.Rows[gridRowIndex];
@@ -1032,13 +1046,6 @@ namespace SolidDNA
                 return builder.ToString().Trim();
             }
 
-            private static string BuildPositionText(OrderPreviewRow row)
-            {
-                if (row == null || row.MatchedComponents.Count == 0)
-                    return string.Empty;
-
-                return string.Join(", ", row.MatchedComponents.Select(component => component.OriginalPosition.ToString()).ToArray());
-            }
 
             private void UpdateStatus()
             {
@@ -1299,26 +1306,80 @@ namespace SolidDNA
                 if (SameComponent(sourceComponent, targetComponent))
                     return true;
 
-                try
-                {
-                    object[] source = new object[] { sourceComponent };
-                    dynamic dynamicAssembly = assemblyDoc;
+                Component2 sourceConcrete = ResolveConcreteComponent(sourceComponent);
+                Component2 targetConcrete = ResolveConcreteComponent(targetComponent);
 
-                    bool moved = dynamicAssembly.ReorderComponents(
-                        source,
-                        targetComponent,
-                        (int)swReorderComponentsWhere_e.swReorderComponents_After);
-
-                    // SOLIDWORKS can return false for a no-op or for a tree position it decides not to change.
-                    // A COM exception is the real hard failure. Verify by rescanning in future if stricter
-                    // validation is required.
-                    return true;
-                }
-                catch (Exception ex)
+                if (sourceConcrete == null || targetConcrete == null)
                 {
-                    error = ex.Message;
+                    error = "SOLIDWORKS component object could not be resolved for tree reorder.";
                     return false;
                 }
+
+                // First use the same scalar Component2 pattern that SOLIDWORKS accepts
+                // for a component-to-component drag/reorder. This avoids DISP_E_BADINDEX
+                // seen with one-element SAFEARRAY calls on some SOLIDWORKS interop builds.
+                try
+                {
+                    bool moved = assemblyDoc.ReorderComponents(
+                        sourceConcrete,
+                        targetConcrete,
+                        (int)swReorderComponentsWhere_e.swReorderComponents_After);
+
+                    if (moved)
+                        return true;
+                }
+                catch (Exception scalarException)
+                {
+                    error = scalarException.Message;
+                }
+
+                // Fallback to the documented C# SAFEARRAY pattern.
+                try
+                {
+                    object[] sourceArray = new object[] { sourceConcrete };
+                    bool moved = assemblyDoc.ReorderComponents(
+                        sourceArray,
+                        targetConcrete,
+                        (int)swReorderComponentsWhere_e.swReorderComponents_After);
+
+                    if (moved)
+                        return true;
+
+                    if (string.IsNullOrWhiteSpace(error))
+                        error = "SOLIDWORKS rejected the tree reorder.";
+                    return false;
+                }
+                catch (Exception arrayException)
+                {
+                    if (string.IsNullOrWhiteSpace(error))
+                        error = arrayException.Message;
+                    else
+                        error += " | Fallback: " + arrayException.Message;
+                    return false;
+                }
+            }
+
+            private Component2 ResolveConcreteComponent(IComponent2 component)
+            {
+                if (component == null)
+                    return null;
+
+                Component2 concrete = component as Component2;
+                if (concrete != null)
+                    return concrete;
+
+                try
+                {
+                    string name = component.Name2;
+                    if (!string.IsNullOrWhiteSpace(name))
+                        concrete = assemblyDoc.GetComponentByName(name) as Component2;
+                }
+                catch
+                {
+                    concrete = null;
+                }
+
+                return concrete;
             }
 
             private static bool SameComponent(IComponent2 first, IComponent2 second)

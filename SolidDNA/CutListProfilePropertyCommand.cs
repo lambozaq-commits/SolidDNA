@@ -6,10 +6,9 @@ using System.Reflection;
 using System.Text;
 using System.Windows.Forms;
 using CADBooster.SolidDna;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-
-using SwEnvironment = CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -683,7 +682,7 @@ namespace SolidDNA
             }
             catch
             {
-                SwEnvironment.Application.ShowMessageBox(
+                IApplication.ShowMessageBox(
                     message,
                     icon == MessageBoxIcon.Error ? SolidWorksMessageBoxIcon.Stop :
                     icon == MessageBoxIcon.Warning ? SolidWorksMessageBoxIcon.Warning :
@@ -711,12 +710,6 @@ namespace SolidDNA
             private readonly PropertyDropdownSettings dropdownSettings;
 
             private DataGridView grid;
-            private ComboBox descriptionBulkValueSelector;
-            private ComboBox brandBulkValueSelector;
-            private ComboBox modelBulkValueSelector;
-            private Panel extraBulkPanel;
-            private Button addBulkPropertyButton;
-            private readonly List<BulkPropertyInputRow> extraBulkInputs = new List<BulkPropertyInputRow>();
             private Label statusLabel;
 
             private const string ApplyColumnName = "__Apply";
@@ -751,136 +744,32 @@ namespace SolidDNA
             {
                 MinimumSize = new Size(900, 560);
 
-                Label helpLabel = new Label();
-                helpLabel.Text = "Edit cut-list item names and properties. Empty property cells are not written. Use Clear Column to intentionally blank a property.";
-                helpLabel.Left = 12;
-                helpLabel.Top = 12;
-                helpLabel.Width = 1180;
-                helpLabel.Height = 24;
-                Controls.Add(helpLabel);
-
-                Button chooseColumnsButton = new Button();
-                chooseColumnsButton.Text = "Choose columns";
-                chooseColumnsButton.Left = 12;
-                chooseColumnsButton.Top = 42;
-                chooseColumnsButton.Width = 135;
-                chooseColumnsButton.Click += delegate { ChooseColumns(); };
-                Controls.Add(chooseColumnsButton);
-
-                Button addColumnButton = new Button();
-                addColumnButton.Text = "Add property column";
-                addColumnButton.Left = 155;
-                addColumnButton.Top = 42;
-                addColumnButton.Width = 145;
-                addColumnButton.Click += delegate { AddNewPropertyColumn(); };
-                Controls.Add(addColumnButton);
-
-                Label descriptionBulkLabel = new Label();
-                descriptionBulkLabel.Text = "Description";
-                descriptionBulkLabel.Left = 330;
-                descriptionBulkLabel.Top = 42;
-                descriptionBulkLabel.Width = 170;
-                Controls.Add(descriptionBulkLabel);
-
-                descriptionBulkValueSelector = new ComboBox();
-                descriptionBulkValueSelector.Left = 330;
-                descriptionBulkValueSelector.Top = 62;
-                descriptionBulkValueSelector.Width = 170;
-                descriptionBulkValueSelector.DropDownStyle = ComboBoxStyle.DropDown;
-                Controls.Add(descriptionBulkValueSelector);
-
-                Label brandBulkLabel = new Label();
-                brandBulkLabel.Text = "Brand";
-                brandBulkLabel.Left = 510;
-                brandBulkLabel.Top = 42;
-                brandBulkLabel.Width = 120;
-                Controls.Add(brandBulkLabel);
-
-                brandBulkValueSelector = new ComboBox();
-                brandBulkValueSelector.Left = 510;
-                brandBulkValueSelector.Top = 62;
-                brandBulkValueSelector.Width = 120;
-                brandBulkValueSelector.DropDownStyle = ComboBoxStyle.DropDown;
-                Controls.Add(brandBulkValueSelector);
-
-                Label modelBulkLabel = new Label();
-                modelBulkLabel.Text = "Model";
-                modelBulkLabel.Left = 640;
-                modelBulkLabel.Top = 42;
-                modelBulkLabel.Width = 145;
-                Controls.Add(modelBulkLabel);
-
-                modelBulkValueSelector = new ComboBox();
-                modelBulkValueSelector.Left = 640;
-                modelBulkValueSelector.Top = 62;
-                modelBulkValueSelector.Width = 145;
-                modelBulkValueSelector.DropDownStyle = ComboBoxStyle.DropDown;
-                Controls.Add(modelBulkValueSelector);
-
-                Button setValueButton = new Button();
-                setValueButton.Text = "Set values";
-                setValueButton.Left = 795;
-                setValueButton.Top = 61;
-                setValueButton.Width = 105;
-                setValueButton.Click += delegate { SetBulkPropertyValuesSmart(); };
-                Controls.Add(setValueButton);
-
-                addBulkPropertyButton = new Button();
-                addBulkPropertyButton.Text = "Add bulk property";
-                addBulkPropertyButton.Left = 910;
-                addBulkPropertyButton.Top = 61;
-                addBulkPropertyButton.Width = 135;
-                addBulkPropertyButton.Click += delegate { AddExtraBulkPropertyInput(); };
-                Controls.Add(addBulkPropertyButton);
-
-                extraBulkPanel = new Panel();
-                extraBulkPanel.Left = 455;
-                extraBulkPanel.Top = 94;
-                extraBulkPanel.Width = 715;
-                extraBulkPanel.Height = 34;
-                extraBulkPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-                Controls.Add(extraBulkPanel);
-
-                Label extraBulkLabel = new Label();
-                extraBulkLabel.Text = "Extra bulk properties:";
-                extraBulkLabel.Left = 0;
-                extraBulkLabel.Top = 7;
-                extraBulkLabel.Width = 135;
-                extraBulkPanel.Controls.Add(extraBulkLabel);
-
-                Button clearColumnButton = new Button();
-                clearColumnButton.Text = "Clear column";
-                clearColumnButton.Left = 12;
-                clearColumnButton.Top = 102;
-                clearColumnButton.Width = 115;
-                clearColumnButton.Click += delegate { ClearSelectedColumnSmart(); };
-                Controls.Add(clearColumnButton);
+                Button editButton = new Button();
+                editButton.Text = "Edit...";
+                editButton.Left = 12;
+                editButton.Top = 14;
+                editButton.Width = 105;
+                editButton.Click += delegate { ShowEditMenu(); };
+                Controls.Add(editButton);
 
                 Button toggleCheckButton = new Button();
                 toggleCheckButton.Text = "Check / uncheck all";
-                toggleCheckButton.Left = 135;
-                toggleCheckButton.Top = 102;
-                toggleCheckButton.Width = 140;
+                toggleCheckButton.Left = 125;
+                toggleCheckButton.Top = 14;
+                toggleCheckButton.Width = 145;
                 toggleCheckButton.Click += delegate { ToggleAllApply(); };
                 Controls.Add(toggleCheckButton);
 
-                Button refreshButton = new Button();
-                refreshButton.Text = "Refresh cut-list items";
-                refreshButton.Left = 285;
-                refreshButton.Top = 102;
-                refreshButton.Width = 150;
-                refreshButton.Click += delegate { RefreshFromSolidWorks(); };
-                Controls.Add(refreshButton);
-
                 grid = new DataGridView();
                 grid.Left = 12;
-                grid.Top = 136;
+                grid.Top = 54;
                 grid.Width = 1240;
-                grid.Height = 402;
+                grid.Height = 484;
                 grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 grid.AllowUserToAddRows = false;
                 grid.AllowUserToDeleteRows = false;
                 grid.RowHeadersVisible = false;
+                grid.MultiSelect = true;
                 grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
                 grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
                 grid.DataError += delegate(object sender, DataGridViewDataErrorEventArgs e) { e.ThrowException = false; };
@@ -913,30 +802,288 @@ namespace SolidDNA
                 statusLabel = new Label();
                 statusLabel.Left = 12;
                 statusLabel.Top = 548;
-                statusLabel.Width = 760;
+                statusLabel.Width = 980;
                 statusLabel.Height = 38;
                 statusLabel.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+                statusLabel.TextAlign = ContentAlignment.MiddleLeft;
                 Controls.Add(statusLabel);
 
                 Button applyButton = new Button();
                 applyButton.Text = "Apply";
-                applyButton.Left = 880;
+                applyButton.Left = 1142;
                 applyButton.Top = 552;
                 applyButton.Width = 110;
                 applyButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
                 applyButton.Click += delegate { ApplyRowsSmart(); };
                 Controls.Add(applyButton);
-
-                Button closeButton = new Button();
-                closeButton.Text = "Close";
-                closeButton.Left = 1000;
-                closeButton.Top = 552;
-                closeButton.Width = 100;
-                closeButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-                closeButton.Click += delegate { Close(); };
-                Controls.Add(closeButton);
             }
 
+            private void ShowEditMenu()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Edit";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(420, 118);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Button columns = new Button();
+                    columns.Text = "Columns";
+                    columns.Left = 18;
+                    columns.Top = 34;
+                    columns.Width = 116;
+                    columns.Height = 34;
+                    columns.Click += delegate { dialog.DialogResult = DialogResult.Yes; dialog.Close(); };
+                    dialog.Controls.Add(columns);
+
+                    Button bulk = new Button();
+                    bulk.Text = "Bulk values";
+                    bulk.Left = 151;
+                    bulk.Top = 34;
+                    bulk.Width = 116;
+                    bulk.Height = 34;
+                    bulk.Click += delegate { dialog.DialogResult = DialogResult.No; dialog.Close(); };
+                    dialog.Controls.Add(bulk);
+
+                    Button clear = new Button();
+                    clear.Text = "Clear property";
+                    clear.Left = 284;
+                    clear.Top = 34;
+                    clear.Width = 116;
+                    clear.Height = 34;
+                    clear.Click += delegate { dialog.DialogResult = DialogResult.Retry; dialog.Close(); };
+                    dialog.Controls.Add(clear);
+
+                    DialogResult result = dialog.ShowDialog(this);
+                    if (result == DialogResult.Yes) ShowColumnsMenu();
+                    else if (result == DialogResult.No) ShowBulkEditDialog();
+                    else if (result == DialogResult.Retry) ShowClearPropertyDialog();
+                }
+            }
+
+            private void ShowColumnsMenu()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Columns";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(455, 120);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Button choose = new Button();
+                    choose.Text = "Choose";
+                    choose.Left = 18;
+                    choose.Top = 32;
+                    choose.Width = 125;
+                    choose.Click += delegate { dialog.DialogResult = DialogResult.Yes; dialog.Close(); };
+                    dialog.Controls.Add(choose);
+
+                    Button add = new Button();
+                    add.Text = "Add property";
+                    add.Left = 156;
+                    add.Top = 32;
+                    add.Width = 125;
+                    add.Click += delegate { dialog.DialogResult = DialogResult.No; dialog.Close(); };
+                    dialog.Controls.Add(add);
+
+                    Button clear = new Button();
+                    clear.Text = "Clear property...";
+                    clear.Left = 294;
+                    clear.Top = 32;
+                    clear.Width = 135;
+                    clear.Click += delegate { dialog.DialogResult = DialogResult.Retry; dialog.Close(); };
+                    dialog.Controls.Add(clear);
+
+                    DialogResult result = dialog.ShowDialog(this);
+                    if (result == DialogResult.Yes) ChooseColumns();
+                    else if (result == DialogResult.No) AddNewPropertyColumn();
+                    else if (result == DialogResult.Retry) ShowClearPropertyDialog();
+                }
+            }
+
+            private void ShowBulkEditDialog()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Bulk Edit";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(610, 250);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    ComboBox description = CreateValueCombo(dialog, "Description", 18, 42, 180, DescriptionPropertyName);
+                    ComboBox brand = CreateValueCombo(dialog, "Brand", 214, 42, 150, BrandPropertyName);
+                    ComboBox model = CreateValueCombo(dialog, "Model", 380, 42, 190, ModelPropertyName);
+
+                    Label extraLabel = new Label();
+                    extraLabel.Text = "Extra property";
+                    extraLabel.Left = 18;
+                    extraLabel.Top = 92;
+                    extraLabel.Width = 170;
+                    dialog.Controls.Add(extraLabel);
+
+                    ComboBox extraProperty = new ComboBox();
+                    extraProperty.Left = 18;
+                    extraProperty.Top = 114;
+                    extraProperty.Width = 180;
+                    extraProperty.DropDownStyle = ComboBoxStyle.DropDown;
+                    foreach (string name in allPropertyNames)
+                        if (!IsRemovedOrderingColumnName(name)) extraProperty.Items.Add(name);
+                    dialog.Controls.Add(extraProperty);
+
+                    ComboBox extraValue = new ComboBox();
+                    extraValue.Left = 214;
+                    extraValue.Top = 114;
+                    extraValue.Width = 356;
+                    extraValue.DropDownStyle = ComboBoxStyle.DropDown;
+                    dialog.Controls.Add(extraValue);
+
+                    extraProperty.TextChanged += delegate
+                    {
+                        extraValue.Items.Clear();
+                        foreach (string option in dropdownSettings.GetOptions(extraProperty.Text))
+                            extraValue.Items.Add(option);
+                    };
+
+                    Label scopeLabel = new Label();
+                    scopeLabel.Text = "Apply to";
+                    scopeLabel.Left = 18;
+                    scopeLabel.Top = 162;
+                    scopeLabel.Width = 70;
+                    dialog.Controls.Add(scopeLabel);
+
+                    ComboBox scopeBox = new ComboBox();
+                    scopeBox.Left = 92;
+                    scopeBox.Top = 157;
+                    scopeBox.Width = 160;
+                    scopeBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                    scopeBox.Items.AddRange(new object[] { "Checked rows", "All rows" });
+                    scopeBox.SelectedIndex = 0;
+                    dialog.Controls.Add(scopeBox);
+
+                    Button apply = new Button();
+                    apply.Text = "Set values";
+                    apply.Left = 392;
+                    apply.Top = 202;
+                    apply.Width = 90;
+                    apply.DialogResult = DialogResult.OK;
+                    dialog.Controls.Add(apply);
+
+                    Button cancel = new Button();
+                    cancel.Text = "Cancel";
+                    cancel.Left = 492;
+                    cancel.Top = 202;
+                    cancel.Width = 78;
+                    cancel.DialogResult = DialogResult.Cancel;
+                    dialog.Controls.Add(cancel);
+
+                    if (dialog.ShowDialog(this) != DialogResult.OK)
+                        return;
+
+                    Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    AddBulkValue(values, DescriptionPropertyName, description.Text);
+                    AddBulkValue(values, BrandPropertyName, brand.Text);
+                    AddBulkValue(values, ModelPropertyName, model.Text);
+                    if (!string.IsNullOrWhiteSpace(extraProperty.Text) && !string.IsNullOrWhiteSpace(extraValue.Text))
+                        AddBulkValue(values, extraProperty.Text.Trim(), extraValue.Text.Trim());
+
+                    if (values.Count == 0)
+                        return;
+
+                    SetBulkPropertyValues(scopeBox.SelectedIndex == 1, values);
+                }
+            }
+
+            private ComboBox CreateValueCombo(Form dialog, string caption, int left, int top, int width, string propertyName)
+            {
+                Label label = new Label();
+                label.Text = caption;
+                label.Left = left;
+                label.Top = top - 22;
+                label.Width = width;
+                dialog.Controls.Add(label);
+
+                ComboBox combo = new ComboBox();
+                combo.Left = left;
+                combo.Top = top;
+                combo.Width = width;
+                combo.DropDownStyle = ComboBoxStyle.DropDown;
+                foreach (string option in dropdownSettings.GetOptions(propertyName))
+                    combo.Items.Add(option);
+                dialog.Controls.Add(combo);
+                return combo;
+            }
+
+            private void ShowClearPropertyDialog()
+            {
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Clear Property";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(390, 160);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    ComboBox propertyBox = new ComboBox();
+                    propertyBox.Left = 24;
+                    propertyBox.Top = 28;
+                    propertyBox.Width = 340;
+                    propertyBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                    foreach (string name in visiblePropertyNames) propertyBox.Items.Add(name);
+                    if (propertyBox.Items.Count > 0) propertyBox.SelectedIndex = 0;
+                    dialog.Controls.Add(propertyBox);
+
+                    Button checkedButton = new Button();
+                    checkedButton.Text = "Checked Only";
+                    checkedButton.Left = 70;
+                    checkedButton.Top = 88;
+                    checkedButton.Width = 110;
+                    checkedButton.Click += delegate
+                    {
+                        ClearPropertyByName(Convert.ToString(propertyBox.SelectedItem), false);
+                        dialog.Close();
+                    };
+                    dialog.Controls.Add(checkedButton);
+
+                    Button allButton = new Button();
+                    allButton.Text = "All";
+                    allButton.Left = 198;
+                    allButton.Top = 88;
+                    allButton.Width = 90;
+                    allButton.Click += delegate
+                    {
+                        ClearPropertyByName(Convert.ToString(propertyBox.SelectedItem), true);
+                        dialog.Close();
+                    };
+                    dialog.Controls.Add(allButton);
+                }
+            }
+
+            private void ClearPropertyByName(string propertyName, bool allRows)
+            {
+                if (string.IsNullOrWhiteSpace(propertyName) || !grid.Columns.Contains(propertyName))
+                    return;
+
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (row.IsNewRow) continue;
+                    if (!allRows && !IsRowChecked(row)) continue;
+                    row.Cells[propertyName].Value = string.Empty;
+                    row.Cells[ApplyColumnName].Value = true;
+                    row.Cells[StatusColumnName].Value = "Ready to clear " + propertyName;
+                }
+                statusLabel.Text = "Clear " + propertyName + " is ready. Click Apply to write to SOLIDWORKS.";
+            }
 
             private void LoadCutListData()
             {
@@ -1040,8 +1187,7 @@ namespace SolidDNA
                     }
                 }
 
-                ReloadBulkValueSelectors();
-                statusLabel.Text = "Loaded " + items.Count + " cut-list item(s). Visible property columns: " + string.Join(", ", visiblePropertyNames.ToArray());
+                statusLabel.Text = items.Count + " cut-list item(s).";
             }
 
             private void AddPropertyGridColumn(string propertyName)
@@ -1128,87 +1274,7 @@ namespace SolidDNA
                        string.Equals(propertyName, BrandPropertyName, StringComparison.OrdinalIgnoreCase) ||
                        string.Equals(propertyName, ModelPropertyName, StringComparison.OrdinalIgnoreCase);
             }
-
-            private void ReloadBulkValueSelectors()
-            {
-                PopulateValueSelector(descriptionBulkValueSelector, DescriptionPropertyName);
-                PopulateValueSelector(brandBulkValueSelector, BrandPropertyName);
-                PopulateValueSelector(modelBulkValueSelector, ModelPropertyName);
-
-                foreach (BulkPropertyInputRow row in extraBulkInputs)
-                {
-                    row.ReloadPropertyOptions(allPropertyNames);
-                    row.ReloadValueOptions(dropdownSettings);
-                }
-            }
-
-            private void PopulateValueSelector(ComboBox comboBox, string propertyName)
-            {
-                if (comboBox == null)
-                    return;
-
-                string currentText = comboBox.Text ?? string.Empty;
-                comboBox.Items.Clear();
-
-                foreach (string option in dropdownSettings.GetOptions(propertyName))
-                {
-                    if (!comboBox.Items.Contains(option))
-                        comboBox.Items.Add(option);
-                }
-
-                comboBox.Text = currentText;
-            }
-
-            private void AddExtraBulkPropertyInput()
-            {
-                if (extraBulkInputs.Count >= 1)
-                {
-                    statusLabel.Text = "One extra bulk property row is available. Add normal columns if you need more.";
-                    return;
-                }
-
-                BulkPropertyInputRow inputRow = new BulkPropertyInputRow(extraBulkPanel, extraBulkInputs.Count, allPropertyNames, dropdownSettings);
-                inputRow.RemoveRequested += delegate
-                {
-                    extraBulkInputs.Remove(inputRow);
-                    inputRow.Dispose();
-                    ReflowExtraBulkInputs();
-                };
-                extraBulkInputs.Add(inputRow);
-                ReflowExtraBulkInputs();
-            }
-
-            private void ReflowExtraBulkInputs()
-            {
-                int index = 0;
-                foreach (BulkPropertyInputRow row in extraBulkInputs)
-                {
-                    row.SetIndex(index);
-                    index++;
-                }
-
-                extraBulkPanel.Height = 34;
-            }
-
-            private string GetSelectedPropertyName()
-            {
-                if (grid != null && grid.CurrentCell != null && grid.CurrentCell.ColumnIndex >= 0)
-                {
-                    string columnName = grid.Columns[grid.CurrentCell.ColumnIndex].Name;
-                    if (IsEditablePropertyColumn(columnName))
-                        return columnName;
-                }
-
-                if (visiblePropertyNames.Count == 1)
-                    return visiblePropertyNames[0];
-
-                return PromptForPropertySelection(
-                    "Cabin Tools - Select Property Column",
-                    "Select the property column to clear:",
-                    visiblePropertyNames);
-            }
-
-            private bool IsEditablePropertyColumn(string columnName)
+private bool IsEditablePropertyColumn(string columnName)
             {
                 if (string.IsNullOrWhiteSpace(columnName))
                     return false;
@@ -1220,68 +1286,7 @@ namespace SolidDNA
 
                 return ContainsIgnoreCase(visiblePropertyNames, columnName);
             }
-
-            private string PromptForPropertySelection(string title, string message, IList<string> propertyNames)
-            {
-                if (propertyNames == null || propertyNames.Count == 0)
-                    return string.Empty;
-
-                using (Form form = new Form())
-                using (Label label = new Label())
-                using (ComboBox comboBox = new ComboBox())
-                using (Button okButton = new Button())
-                using (Button cancelButton = new Button())
-                {
-                    form.Text = title;
-                    form.Width = 430;
-                    form.Height = 155;
-                    form.StartPosition = FormStartPosition.CenterParent;
-                    form.FormBorderStyle = FormBorderStyle.FixedDialog;
-                    form.MinimizeBox = false;
-                    form.MaximizeBox = false;
-                    form.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-
-                    label.Text = message;
-                    label.Left = 12;
-                    label.Top = 14;
-                    label.Width = 390;
-                    form.Controls.Add(label);
-
-                    comboBox.Left = 12;
-                    comboBox.Top = 40;
-                    comboBox.Width = 390;
-                    comboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-                    foreach (string propertyName in propertyNames)
-                        comboBox.Items.Add(propertyName);
-                    if (comboBox.Items.Count > 0)
-                        comboBox.SelectedIndex = 0;
-                    form.Controls.Add(comboBox);
-
-                    okButton.Text = "OK";
-                    okButton.Left = 225;
-                    okButton.Top = 78;
-                    okButton.Width = 80;
-                    okButton.DialogResult = DialogResult.OK;
-                    form.Controls.Add(okButton);
-
-                    cancelButton.Text = "Cancel";
-                    cancelButton.Left = 315;
-                    cancelButton.Top = 78;
-                    cancelButton.Width = 80;
-                    cancelButton.DialogResult = DialogResult.Cancel;
-                    form.Controls.Add(cancelButton);
-
-                    form.AcceptButton = okButton;
-                    form.CancelButton = cancelButton;
-
-                    if (form.ShowDialog(this) != DialogResult.OK)
-                        return string.Empty;
-
-                    return comboBox.SelectedItem == null ? string.Empty : comboBox.SelectedItem.ToString();
-                }
-            }
-
-            private void CommitGridEdits()
+private void CommitGridEdits()
             {
                 try
                 {
@@ -1299,32 +1304,7 @@ namespace SolidDNA
                     // use whatever value is already committed to the cell.
                 }
             }
-
-            private void SetBulkPropertyValuesSmart()
-            {
-                Dictionary<string, string> values = CollectBulkPropertyValues();
-                if (values.Count == 0)
-                {
-                    statusLabel.Text = "Enter at least one bulk value before using Set values.";
-                    return;
-                }
-
-                RowTargetScope scope = ResolveRowTargetScope("Set Values");
-                if (scope == RowTargetScope.Cancelled)
-                    return;
-
-                SetBulkPropertyValues(scope == RowTargetScope.AllRows, values);
-            }
-
-            private void ClearSelectedColumnSmart()
-            {
-                RowTargetScope scope = ResolveRowTargetScope("Clear Column");
-                if (scope == RowTargetScope.Cancelled)
-                    return;
-                ClearSelectedColumn(scope == RowTargetScope.AllRows);
-            }
-
-            private void ApplyRowsSmart()
+private void ApplyRowsSmart()
             {
                 RowTargetScope scope = ResolveRowTargetScope("Apply");
                 if (scope == RowTargetScope.Cancelled)
@@ -1425,59 +1405,12 @@ namespace SolidDNA
 
             private void ToggleAllApply()
             {
-                List<DataGridViewRow> targetRows = GetSelectedGridRows();
-                bool usingSelection = targetRows.Count > 1;
-
-                if (!usingSelection)
-                {
-                    targetRows = new List<DataGridViewRow>();
-                    foreach (DataGridViewRow row in grid.Rows)
-                    {
-                        if (!row.IsNewRow)
-                            targetRows.Add(row);
-                    }
-                }
-
-                if (targetRows.Count == 0)
-                    return;
-
-                bool allTargetRowsChecked = true;
-                foreach (DataGridViewRow row in targetRows)
-                {
-                    if (!IsRowChecked(row))
-                    {
-                        allTargetRowsChecked = false;
-                        break;
-                    }
-                }
-
-                bool newValue = !allTargetRowsChecked;
-                foreach (DataGridViewRow row in targetRows)
-                {
-                    if (!row.IsNewRow)
-                        row.Cells[ApplyColumnName].Value = newValue;
-                }
+                GridCheckBehavior.ToggleSelectedThenAll(
+                    grid,
+                    IsRowChecked,
+                    (row, value) => row.Cells[ApplyColumnName].Value = value);
             }
-
-            private Dictionary<string, string> CollectBulkPropertyValues()
-            {
-                Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                AddBulkValue(values, DescriptionPropertyName, descriptionBulkValueSelector == null ? string.Empty : descriptionBulkValueSelector.Text);
-                AddBulkValue(values, BrandPropertyName, brandBulkValueSelector == null ? string.Empty : brandBulkValueSelector.Text);
-                AddBulkValue(values, ModelPropertyName, modelBulkValueSelector == null ? string.Empty : modelBulkValueSelector.Text);
-
-                foreach (BulkPropertyInputRow inputRow in extraBulkInputs)
-                {
-                    if (inputRow == null)
-                        continue;
-
-                    AddBulkValue(values, inputRow.PropertyName, inputRow.Value);
-                }
-
-                return values;
-            }
-
-            private void AddBulkValue(Dictionary<string, string> values, string propertyName, string value)
+private void AddBulkValue(Dictionary<string, string> values, string propertyName, string value)
             {
                 if (values == null)
                     return;
@@ -1535,7 +1468,6 @@ namespace SolidDNA
 
                 dropdownSettings.SetVisibleColumns("CutList", visiblePropertyNames);
                 dropdownSettings.Save();
-                ReloadBulkValueSelectors();
                 statusLabel.Text = "Set " + values.Count + " bulk value" + (values.Count == 1 ? string.Empty : "s") + " on " + editedRows + " row(s). Click Apply to write to SOLIDWORKS.";
             }
 
@@ -1573,54 +1505,7 @@ namespace SolidDNA
                     row.Cells[propertyName].Value = currentValue ?? string.Empty;
                 }
             }
-
-            private void ClearSelectedColumn(bool allRows)
-            {
-                CommitGridEdits();
-                string propertyName = GetSelectedPropertyName();
-                if (string.IsNullOrWhiteSpace(propertyName))
-                    return;
-
-                DialogResult result = MessageBox.Show(
-                    "This will set property '" + propertyName + "' to a blank value.\r\n\r\n" +
-                    "Rows affected: " + (allRows ? "all rows" : "checked rows") + ".",
-                    "Cabin Tools - Clear Cut-List Property Column",
-                    MessageBoxButtons.OKCancel,
-                    MessageBoxIcon.Warning);
-
-                if (result != DialogResult.OK)
-                    return;
-
-                int updated = 0;
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    if (row.IsNewRow)
-                        continue;
-                    if (!allRows && !IsRowChecked(row))
-                        continue;
-
-                    CutListItemInfo item = row.Tag as CutListItemInfo;
-                    if (item == null || item.PropertyManager == null)
-                        continue;
-
-                    try
-                    {
-                        SetTextProperty(item.PropertyManager, propertyName, string.Empty);
-                        row.Cells[propertyName].Value = string.Empty;
-                        row.Cells[StatusColumnName].Value = "Cleared " + propertyName;
-                        updated++;
-                    }
-                    catch (Exception ex)
-                    {
-                        row.Cells[StatusColumnName].Value = "! " + ex.Message;
-                    }
-                }
-
-                ForceRebuild();
-                statusLabel.Text = "Cleared " + propertyName + " on " + updated + " row(s).";
-            }
-
-            private void ApplyRows(bool allRows)
+private void ApplyRows(bool allRows)
             {
                 CommitGridEdits();
                 CabinCustomPropertyStore.EnsureCanWrite(modelDoc);

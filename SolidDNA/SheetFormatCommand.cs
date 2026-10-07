@@ -1,14 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
 using CADBooster.SolidDna;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-
-using SwEnvironment =
-    CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -246,7 +244,7 @@ namespace SolidDNA
             drawingModel = null;
 
             ISldWorks swApp =
-                SwEnvironment.Application
+                IApplication
                     .UnsafeObject as ISldWorks;
 
             if (swApp == null)

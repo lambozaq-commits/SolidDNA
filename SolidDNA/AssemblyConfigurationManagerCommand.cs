@@ -5,10 +5,9 @@ using System.IO;
 using System.Reflection;
 using System.Windows.Forms;
 using CADBooster.SolidDna;
+using static CADBooster.SolidDna.SolidWorksEnvironment;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-
-using SwEnvironment = CADBooster.SolidDna.SolidWorksEnvironment;
 
 namespace SolidDNA
 {
@@ -28,10 +27,12 @@ namespace SolidDNA
     /// </summary>
     internal static class AssemblyConfigurationManagerCommand
     {
+        private static AssemblyConfigurationMatrixForm activeMatrix;
+
         public static void ShowAssemblyConfigurationManagerForm()
         {
             ISldWorks swApp = null;
-            try { swApp = SwEnvironment.Application.UnsafeObject as ISldWorks; } catch { swApp = null; }
+            try { swApp = IApplication.UnsafeObject as ISldWorks; } catch { swApp = null; }
 
             if (swApp == null)
             {
@@ -52,6 +53,57 @@ namespace SolidDNA
             }
         }
 
+        public static void ShowMatrix()
+        {
+            ISldWorks swApp = null;
+            try { swApp = IApplication.UnsafeObject as ISldWorks; } catch { swApp = null; }
+            IModelDoc2 model = swApp == null ? null : swApp.ActiveDoc as IModelDoc2;
+            if (swApp == null || model == null || model.GetType() != (int)swDocumentTypes_e.swDocASSEMBLY)
+            {
+                MessageBox.Show("Open an assembly before using the configuration matrix.", "Cabin Tools - Assembly Configuration Matrix", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                if (activeMatrix != null && !activeMatrix.IsDisposed)
+                {
+                    if (activeMatrix.BelongsTo(model))
+                    {
+                        activeMatrix.Show();
+                        activeMatrix.WindowState = FormWindowState.Normal;
+                        activeMatrix.BringToFront();
+                        activeMatrix.Activate();
+                        return;
+                    }
+                    AssemblyConfigurationMatrixForm previous = activeMatrix;
+                    previous.Close();
+                    if (!previous.IsDisposed) return; // Pending edits kept; the user cancelled Close.
+                }
+
+                activeMatrix = new AssemblyConfigurationMatrixForm(swApp, model);
+                activeMatrix.FormClosed += delegate { activeMatrix = null; };
+                activeMatrix.Show();
+                activeMatrix.BringToFront();
+                activeMatrix.Activate();
+            }
+            catch (Exception ex)
+            {
+                if (activeMatrix != null)
+                {
+                    try { activeMatrix.Dispose(); }
+                    catch { }
+                    activeMatrix = null;
+                }
+                PropertyPaneLogger.Write("Assembly Configuration Matrix failed to open. " + ex);
+                MessageBox.Show(
+                    "The Assembly Configuration Matrix could not be opened.\n\n" + ex.Message,
+                    "Cabin Tools - Assembly Configuration Matrix",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
         private sealed class AssemblyConfigurationManagerForm : Form
         {
             private readonly ISldWorks swApp;
@@ -63,21 +115,15 @@ namespace SolidDNA
 
             private DataGridView grid;
             private Label statusLabel;
-            private Button scanButton;
-            private Button selectionButton;
             private Button checkAllButton;
-            private Button setTargetButton;
             private Button applyButton;
             private Button undoButton;
-            private ComboBox assemblyScopeBox;
-            private CheckedListBox assemblyConfigList;
 
             private const int ApplyColumnIndex = 0;
             private const int InstanceColumnIndex = 1;
             private const int CurrentConfigColumnIndex = 2;
             private const int TargetConfigColumnIndex = 3;
-            private const int AvailableConfigColumnIndex = 4;
-            private const int StatusColumnIndex = 5;
+            private const int StatusColumnIndex = 4;
 
             private enum RowScope
             {
@@ -106,9 +152,7 @@ namespace SolidDNA
                 Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
                 BuildLayout();
-                LoadAssemblyConfigurations();
                 ScanComponents();
-                CheckRowsFromSolidWorksSelection(false);
             }
 
             private void BuildLayout()
@@ -117,8 +161,7 @@ namespace SolidDNA
                 root.Dock = DockStyle.Fill;
                 root.Padding = new Padding(14);
                 root.ColumnCount = 1;
-                root.RowCount = 5;
-                root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                root.RowCount = 4;
                 root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -137,59 +180,14 @@ namespace SolidDNA
                 actions.WrapContents = true;
                 actions.Margin = new Padding(0, 0, 0, 8);
 
-                scanButton = CreateButton("Scan components", delegate { ScanComponents(); });
-                selectionButton = CreateButton("Use SOLIDWORKS selection", delegate { CheckRowsFromSolidWorksSelection(true); });
                 checkAllButton = CreateButton("Check / uncheck all", delegate { ToggleAllChecks(); });
-                setTargetButton = CreateButton("Set target...", delegate { SetTargetForSelectedOrCheckedRows(); });
-                undoButton = CreateButton("Undo last", delegate { UndoLast(); });
+                undoButton = CreateButton("Undo", delegate { UndoLast(); });
                 applyButton = CreateButton("Apply", delegate { ApplyButton_Click(); });
 
-                actions.Controls.Add(scanButton);
-                actions.Controls.Add(selectionButton);
                 actions.Controls.Add(checkAllButton);
-                actions.Controls.Add(setTargetButton);
                 actions.Controls.Add(undoButton);
                 actions.Controls.Add(applyButton);
                 root.Controls.Add(actions, 0, 1);
-
-                TableLayoutPanel scopeLayout = new TableLayoutPanel();
-                scopeLayout.Dock = DockStyle.Top;
-                scopeLayout.AutoSize = true;
-                scopeLayout.ColumnCount = 4;
-                scopeLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                scopeLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
-                scopeLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                scopeLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                scopeLayout.Margin = new Padding(0, 0, 0, 8);
-
-                Label scopeLabel = new Label();
-                scopeLabel.Text = "Apply in assembly configurations:";
-                scopeLabel.AutoSize = true;
-                scopeLabel.Anchor = AnchorStyles.Left;
-                scopeLayout.Controls.Add(scopeLabel, 0, 0);
-
-                assemblyScopeBox = new ComboBox();
-                assemblyScopeBox.DropDownStyle = ComboBoxStyle.DropDownList;
-                assemblyScopeBox.Items.AddRange(new object[] { "Active configuration only", "Checked configurations", "All configurations" });
-                assemblyScopeBox.SelectedIndex = 0;
-                assemblyScopeBox.Dock = DockStyle.Fill;
-                scopeLayout.Controls.Add(assemblyScopeBox, 1, 0);
-
-                Label checklistLabel = new Label();
-                checklistLabel.Text = "Configuration checklist:";
-                checklistLabel.AutoSize = true;
-                checklistLabel.Anchor = AnchorStyles.Left;
-                checklistLabel.Margin = new Padding(18, 0, 6, 0);
-                scopeLayout.Controls.Add(checklistLabel, 2, 0);
-
-                assemblyConfigList = new CheckedListBox();
-                assemblyConfigList.Height = 68;
-                assemblyConfigList.CheckOnClick = true;
-                assemblyConfigList.MultiColumn = true;
-                assemblyConfigList.Dock = DockStyle.Fill;
-                scopeLayout.Controls.Add(assemblyConfigList, 3, 0);
-
-                root.Controls.Add(scopeLayout, 0, 2);
 
                 grid = new DataGridView();
                 grid.Dock = DockStyle.Fill;
@@ -214,27 +212,20 @@ namespace SolidDNA
                 DataGridViewTextBoxColumn instanceColumn = new DataGridViewTextBoxColumn();
                 instanceColumn.HeaderText = "Component";
                 instanceColumn.ReadOnly = true;
-                instanceColumn.Width = 220;
+                instanceColumn.Width = 330;
                 grid.Columns.Add(instanceColumn);
-
 
                 DataGridViewTextBoxColumn currentColumn = new DataGridViewTextBoxColumn();
                 currentColumn.HeaderText = "Current configuration";
                 currentColumn.ReadOnly = true;
-                currentColumn.Width = 220;
+                currentColumn.Width = 230;
                 grid.Columns.Add(currentColumn);
 
                 DataGridViewComboBoxColumn targetColumn = new DataGridViewComboBoxColumn();
                 targetColumn.HeaderText = "Target configuration";
-                targetColumn.Width = 260;
+                targetColumn.Width = 270;
                 targetColumn.FlatStyle = FlatStyle.Flat;
                 grid.Columns.Add(targetColumn);
-
-                DataGridViewTextBoxColumn availableColumn = new DataGridViewTextBoxColumn();
-                availableColumn.HeaderText = "Available configurations";
-                availableColumn.ReadOnly = true;
-                availableColumn.Width = 250;
-                grid.Columns.Add(availableColumn);
 
                 DataGridViewTextBoxColumn statusColumn = new DataGridViewTextBoxColumn();
                 statusColumn.HeaderText = "Status";
@@ -242,16 +233,16 @@ namespace SolidDNA
                 statusColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
                 grid.Columns.Add(statusColumn);
 
-                root.Controls.Add(grid, 0, 3);
+                root.Controls.Add(grid, 0, 2);
 
                 statusLabel = new Label();
                 statusLabel.AutoSize = false;
                 statusLabel.Dock = DockStyle.Fill;
-                statusLabel.Height = 54;
-                statusLabel.Padding = new Padding(4, 8, 4, 0);
-                statusLabel.Font = new Font(Font.FontFamily, 11F, FontStyle.Bold, GraphicsUnit.Point);
+                statusLabel.Height = 42;
+                statusLabel.Padding = new Padding(4, 6, 4, 0);
+                statusLabel.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold, GraphicsUnit.Point);
                 statusLabel.TextAlign = ContentAlignment.MiddleLeft;
-                root.Controls.Add(statusLabel, 0, 4);
+                root.Controls.Add(statusLabel, 0, 3);
 
                 Controls.Add(root);
             }
@@ -265,18 +256,6 @@ namespace SolidDNA
                 button.Margin = new Padding(0, 0, 10, 6);
                 button.Click += clickHandler;
                 return button;
-            }
-
-            private void LoadAssemblyConfigurations()
-            {
-                assemblyConfigList.Items.Clear();
-                List<string> names = GetConfigurationNames(assemblyModel);
-                string active = GetActiveAssemblyConfigurationName();
-                foreach (string name in names)
-                {
-                    bool check = string.Equals(name, active, StringComparison.OrdinalIgnoreCase);
-                    assemblyConfigList.Items.Add(name, check);
-                }
             }
 
             private void ScanComponents()
@@ -324,7 +303,7 @@ namespace SolidDNA
                     updatingGridInternally = false;
                 }
 
-                SetStatus("Scanned " + rows.Count.ToString() + " top-level component(s). Component names match the SOLIDWORKS FeatureManager style: component name, component description, and configuration name.");
+                SetStatus(rows.Count.ToString() + " component(s)");
             }
 
             private static int CompareRowsForGrouping(ComponentConfigRow a, ComponentConfigRow b)
@@ -386,10 +365,8 @@ namespace SolidDNA
                 gridRow.Cells[ApplyColumnIndex].Value = row.Apply;
                 gridRow.Cells[InstanceColumnIndex].Value = BuildFeatureTreeLikeComponentName(row);
                 gridRow.Cells[CurrentConfigColumnIndex].Value = row.CurrentConfiguration;
-                gridRow.Cells[AvailableConfigColumnIndex].Value = BuildAvailableSummary(row.ConfigurationNames);
                 gridRow.Cells[StatusColumnIndex].Value = row.Status;
                 gridRow.Cells[InstanceColumnIndex].ToolTipText = BuildComponentTooltip(row);
-                gridRow.Cells[AvailableConfigColumnIndex].ToolTipText = string.Join(", ", row.ConfigurationNames.ToArray());
 
                 DataGridViewComboBoxCell targetCell = new DataGridViewComboBoxCell();
                 foreach (string configName in row.ConfigurationNames)
@@ -425,20 +402,13 @@ namespace SolidDNA
                 if (row == null)
                     return string.Empty;
 
-                string primary = string.IsNullOrWhiteSpace(row.InstanceName) ? "<component>" : row.InstanceName.Trim();
+                string instance = string.IsNullOrWhiteSpace(row.InstanceName) ? "<component>" : row.InstanceName.Trim();
                 string description = string.IsNullOrWhiteSpace(row.Description) ? string.Empty : row.Description.Trim();
-                string configuration = string.IsNullOrWhiteSpace(row.CurrentConfiguration) ? string.Empty : row.CurrentConfiguration.Trim();
-
-                if (!string.IsNullOrWhiteSpace(description) && !string.IsNullOrWhiteSpace(configuration))
-                    return primary + " ('" + description + "' " + configuration + ")";
 
                 if (!string.IsNullOrWhiteSpace(description))
-                    return primary + " ('" + description + "')";
+                    return description + " [" + instance + "]";
 
-                if (!string.IsNullOrWhiteSpace(configuration))
-                    return primary + " (" + configuration + ")";
-
-                return primary;
+                return instance;
             }
 
             private static string BuildAvailableSummary(List<string> names)
@@ -497,56 +467,32 @@ namespace SolidDNA
 
             private void ToggleAllChecks()
             {
-                List<DataGridViewRow> targetGridRows = GetSelectedGridRows();
-                bool usingSelection = targetGridRows.Count > 1;
-
-                if (!usingSelection)
-                {
-                    targetGridRows = new List<DataGridViewRow>();
-                    foreach (DataGridViewRow gridRow in grid.Rows)
-                    {
-                        if (!gridRow.IsNewRow && gridRow.Tag is ComponentConfigRow)
-                            targetGridRows.Add(gridRow);
-                    }
-                }
-
-                if (targetGridRows.Count == 0)
-                    return;
-
                 CaptureUndo("Before check toggle");
 
-                bool allTargetRowsChecked = true;
-                foreach (DataGridViewRow gridRow in targetGridRows)
-                {
-                    ComponentConfigRow row = gridRow.Tag as ComponentConfigRow;
-                    if (row == null || !row.Apply)
-                    {
-                        allTargetRowsChecked = false;
-                        break;
-                    }
-                }
-
-                bool newValue = !allTargetRowsChecked;
                 updatingGridInternally = true;
                 try
                 {
-                    foreach (DataGridViewRow gridRow in targetGridRows)
-                    {
-                        ComponentConfigRow row = gridRow.Tag as ComponentConfigRow;
-                        if (row == null)
-                            continue;
+                    GridCheckBehavior.ToggleSelectedThenAll(
+                        grid,
+                        gridRow =>
+                        {
+                            ComponentConfigRow row = gridRow.Tag as ComponentConfigRow;
+                            return row != null && row.Apply;
+                        },
+                        (gridRow, value) =>
+                        {
+                            ComponentConfigRow row = gridRow.Tag as ComponentConfigRow;
+                            if (row == null)
+                                return;
 
-                        row.Apply = newValue;
-                        gridRow.Cells[ApplyColumnIndex].Value = newValue;
-                    }
+                            row.Apply = value;
+                            gridRow.Cells[ApplyColumnIndex].Value = value;
+                        });
                 }
                 finally
                 {
                     updatingGridInternally = false;
                 }
-
-                string scopeText = usingSelection ? "selected row(s)" : "all rows";
-                SetStatus((newValue ? "Checked " : "Unchecked ") + targetGridRows.Count.ToString() + " " + scopeText + ".");
             }
 
             private List<DataGridViewRow> GetSelectedGridRows()
@@ -787,9 +733,16 @@ namespace SolidDNA
 
             private void ApplyButton_Click()
             {
-                RowScope rowScope = ResolveRowScope("Apply configuration changes to");
-                if (rowScope == RowScope.Cancel)
+                RowScope rowScope = RowScope.SelectedRows;
+                if (CountCheckedRows() == 0)
+                {
+                    MessageBox.Show(
+                        "Check the component rows you want to apply first.",
+                        "Cabin Tools - Assembly Configuration Manager",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
                     return;
+                }
 
                 string writeBlockReason = CabinCustomPropertyStore.GetWriteBlockReason(assemblyModel);
                 if (!string.IsNullOrWhiteSpace(writeBlockReason))
@@ -798,7 +751,14 @@ namespace SolidDNA
                     return;
                 }
 
-                List<string> targetAssemblyConfigurations = GetTargetAssemblyConfigurations();
+                string tableBlockReason = GetDesignTableBlockReason(assemblyModel);
+                if (!string.IsNullOrWhiteSpace(tableBlockReason))
+                {
+                    MessageBox.Show(tableBlockReason, "Cabin Tools - Assembly Configuration Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                List<string> targetAssemblyConfigurations = PromptTargetAssemblyConfigurations();
                 if (targetAssemblyConfigurations.Count == 0)
                 {
                     MessageBox.Show("No assembly configurations are selected for applying changes.", "Cabin Tools - Assembly Configuration Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1035,34 +995,126 @@ namespace SolidDNA
                 return map;
             }
 
-            private List<string> GetTargetAssemblyConfigurations()
+            private List<string> PromptTargetAssemblyConfigurations()
             {
-                AssemblyConfigScope scope = GetAssemblyConfigScope();
                 List<string> result = new List<string>();
+                List<string> allConfigurations = GetConfigurationNames(assemblyModel);
+                string active = GetActiveAssemblyConfigurationName();
 
-                if (scope == AssemblyConfigScope.Active)
+                using (Form dialog = new Form())
                 {
-                    AddUnique(result, GetActiveAssemblyConfigurationName());
-                    return result;
+                    dialog.Text = "Cabin Tools - Apply In";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(390, 138);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    Label label = new Label();
+                    label.Text = "Apply in assembly configurations";
+                    label.Font = new Font(dialog.Font, FontStyle.Bold);
+                    label.TextAlign = ContentAlignment.MiddleCenter;
+                    label.Left = 20;
+                    label.Top = 18;
+                    label.Width = 350;
+                    label.Height = 28;
+                    dialog.Controls.Add(label);
+
+                    Button activeButton = new Button();
+                    activeButton.Text = "Active";
+                    activeButton.Left = 24;
+                    activeButton.Top = 72;
+                    activeButton.Width = 95;
+                    activeButton.Click += delegate
+                    {
+                        AddUnique(result, active);
+                        dialog.DialogResult = DialogResult.OK;
+                        dialog.Close();
+                    };
+                    dialog.Controls.Add(activeButton);
+
+                    Button allButton = new Button();
+                    allButton.Text = "All";
+                    allButton.Left = 132;
+                    allButton.Top = 72;
+                    allButton.Width = 95;
+                    allButton.Click += delegate
+                    {
+                        foreach (string name in allConfigurations) AddUnique(result, name);
+                        dialog.DialogResult = DialogResult.OK;
+                        dialog.Close();
+                    };
+                    dialog.Controls.Add(allButton);
+
+                    Button specificButton = new Button();
+                    specificButton.Text = "Specific...";
+                    specificButton.Left = 240;
+                    specificButton.Top = 72;
+                    specificButton.Width = 105;
+                    specificButton.Click += delegate
+                    {
+                        List<string> selected = PromptSpecificAssemblyConfigurations(allConfigurations, active);
+                        if (selected == null)
+                            return;
+                        foreach (string name in selected) AddUnique(result, name);
+                        dialog.DialogResult = DialogResult.OK;
+                        dialog.Close();
+                    };
+                    dialog.Controls.Add(specificButton);
+
+                    dialog.ShowDialog(this);
                 }
-
-                if (scope == AssemblyConfigScope.All)
-                    return GetConfigurationNames(assemblyModel);
-
-                foreach (object checkedItem in assemblyConfigList.CheckedItems)
-                    AddUnique(result, Convert.ToString(checkedItem));
 
                 return result;
             }
 
-            private AssemblyConfigScope GetAssemblyConfigScope()
+            private List<string> PromptSpecificAssemblyConfigurations(List<string> names, string active)
             {
-                string text = Convert.ToString(assemblyScopeBox.SelectedItem);
-                if (text.IndexOf("All", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return AssemblyConfigScope.All;
-                if (text.IndexOf("Checked", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return AssemblyConfigScope.Checked;
-                return AssemblyConfigScope.Active;
+                using (Form dialog = new Form())
+                {
+                    dialog.Text = "Cabin Tools - Configurations";
+                    dialog.StartPosition = FormStartPosition.CenterParent;
+                    dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    dialog.ClientSize = new Size(360, 360);
+                    dialog.MinimizeBox = false;
+                    dialog.MaximizeBox = false;
+                    dialog.ShowInTaskbar = false;
+
+                    CheckedListBox list = new CheckedListBox();
+                    list.Left = 16;
+                    list.Top = 16;
+                    list.Width = 328;
+                    list.Height = 282;
+                    list.CheckOnClick = true;
+                    foreach (string name in names)
+                        list.Items.Add(name, string.Equals(name, active, StringComparison.OrdinalIgnoreCase));
+                    dialog.Controls.Add(list);
+
+                    Button ok = new Button();
+                    ok.Text = "Apply";
+                    ok.Left = 170;
+                    ok.Top = 312;
+                    ok.Width = 80;
+                    ok.DialogResult = DialogResult.OK;
+                    dialog.Controls.Add(ok);
+
+                    Button cancel = new Button();
+                    cancel.Text = "Cancel";
+                    cancel.Left = 264;
+                    cancel.Top = 312;
+                    cancel.Width = 80;
+                    cancel.DialogResult = DialogResult.Cancel;
+                    dialog.Controls.Add(cancel);
+
+                    if (dialog.ShowDialog(this) != DialogResult.OK)
+                        return null;
+
+                    List<string> selected = new List<string>();
+                    foreach (object item in list.CheckedItems)
+                        AddUnique(selected, Convert.ToString(item));
+                    return selected;
+                }
             }
 
             private string GetActiveAssemblyConfigurationName()
@@ -1131,7 +1183,7 @@ namespace SolidDNA
                     dialog.Controls.Add(allButton);
 
                     Button selectedButton = new Button();
-                    selectedButton.Text = "Selected Rows";
+                    selectedButton.Text = "Checked Only";
                     selectedButton.Left = 166;
                     selectedButton.Top = 74;
                     selectedButton.Width = 116;
@@ -1642,6 +1694,47 @@ namespace SolidDNA
                 catch
                 {
                     return false;
+                }
+            }
+
+            private static string GetDesignTableBlockReason(IModelDoc2 model)
+            {
+                try
+                {
+                    // GetDesignTable can return an empty placeholder even when there
+                    // is no actual Design Table feature in the assembly tree.
+                    IFeature feature = model.FirstFeature() as IFeature;
+                    bool hasDesignTableFeature = false;
+                    int guard = 0;
+                    while (feature != null && guard++ < 5000)
+                    {
+                        if ((feature.GetTypeName2() ?? string.Empty).IndexOf("DesignTable", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            hasDesignTableFeature = true;
+                            break;
+                        }
+                        feature = feature.GetNextFeature() as IFeature;
+                    }
+                    if (!hasDesignTableFeature)
+                        return string.Empty;
+
+                    IDesignTable designTable = model.GetDesignTable() as IDesignTable;
+                    if (designTable == null)
+                        return "A Design Table feature is present in this assembly. Direct component edits are blocked until its bindings are verified.";
+
+                    string sourcePath = string.Empty;
+                    try { sourcePath = designTable.FileName ?? string.Empty; }
+                    catch { }
+                    string sourceKind = "design-table-controlled";
+                    try { sourceKind = designTable.LinkToFile ? "linked design-table-controlled" : "embedded design-table-controlled"; }
+                    catch { }
+                    return "This assembly has an " + sourceKind + " configuration source" +
+                        (string.IsNullOrWhiteSpace(sourcePath) ? string.Empty : ":\r\n" + sourcePath) +
+                        ". Direct component edits are blocked because the design table could overwrite them. No changes were applied.";
+                }
+                catch
+                {
+                    return "The assembly's design-table status could not be verified. Direct component edits are blocked to protect the configuration source.";
                 }
             }
         }
