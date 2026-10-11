@@ -12,9 +12,9 @@ namespace SolidDNA
     /// Compact document utilities shown directly on the Cabin Tools CommandManager tab.
     ///
     /// Image quality:
-    /// - Low    = 10
-    /// - Medium = 50
-    /// - High   = 100
+    /// - Low    = 10 for shaded and wireframe
+    /// - Medium = 50 for shaded and wireframe
+    /// - High   = 100 for shaded and wireframe
     ///
     /// Advanced Save normalizes the active document before saving:
     /// section view off, FeatureManager Design Tree active, Shaded With Edges,
@@ -159,36 +159,64 @@ namespace SolidDNA
                 return;
             }
 
+            IModelDocExtension extension = null;
+            bool restoreApplyToReferenced = false;
+            bool previousApplyToReferenced = false;
             try
             {
-                bool restoreApplyToReferenced = false;
-                bool previousApplyToReferenced = false;
-                IModelDocExtension extension = model.Extension;
+                extension = model.Extension;
+                if (extension == null)
+                    throw new InvalidOperationException("Document image quality options are unavailable.");
 
-                if (documentType == (int)swDocumentTypes_e.swDocASSEMBLY && extension != null)
+                if (documentType == (int)swDocumentTypes_e.swDocASSEMBLY)
                 {
                     try
                     {
                         previousApplyToReferenced = extension.GetUserPreferenceToggle(
                             (int)swUserPreferenceToggle_e.swImageQualityApplyToAllReferencedPartDoc,
                             (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified);
+                        restoreApplyToReferenced = true;
 
                         extension.SetUserPreferenceToggle(
                             (int)swUserPreferenceToggle_e.swImageQualityApplyToAllReferencedPartDoc,
                             (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified,
                             true);
 
-                        restoreApplyToReferenced = true;
                     }
                     catch
                     {
-                        restoreApplyToReferenced = false;
+                        // The saved value is restored in finally if setting the toggle failed midway.
                     }
                 }
 
                 model.SetTessellationQuality(quality);
-                model.GraphicsRedraw2();
 
+                int noOption = (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified;
+                bool customSet = extension.SetUserPreferenceInteger(
+                    (int)swUserPreferenceIntegerValue_e.swImageQualityWireframe,
+                    noOption,
+                    (int)swImageQualityWireframe_e.swWireframeImageQualityCustom);
+                bool valueSet = extension.SetUserPreferenceInteger(
+                    (int)swUserPreferenceIntegerValue_e.swImageQualityWireframeValue,
+                    noOption,
+                    quality);
+                int actualMode = extension.GetUserPreferenceInteger(
+                    (int)swUserPreferenceIntegerValue_e.swImageQualityWireframe, noOption);
+                int actualValue = extension.GetUserPreferenceInteger(
+                    (int)swUserPreferenceIntegerValue_e.swImageQualityWireframeValue, noOption);
+                if (actualMode != (int)swImageQualityWireframe_e.swWireframeImageQualityCustom ||
+                    actualValue != quality)
+                    throw new InvalidOperationException("SOLIDWORKS did not accept the requested wireframe resolution" +
+                        (customSet && valueSet ? "." : " (one of the preference updates failed)."));
+
+                model.GraphicsRedraw2();
+            }
+            catch (Exception ex)
+            {
+                ShowWarning("Could not set image quality.\r\n\r\n" + ex.Message);
+            }
+            finally
+            {
                 if (restoreApplyToReferenced && extension != null)
                 {
                     try
@@ -198,14 +226,8 @@ namespace SolidDNA
                             (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified,
                             previousApplyToReferenced);
                     }
-                    catch
-                    {
-                    }
+                    catch { }
                 }
-            }
-            catch (Exception ex)
-            {
-                ShowWarning("Could not set image quality.\r\n\r\n" + ex.Message);
             }
         }
 

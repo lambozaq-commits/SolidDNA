@@ -204,7 +204,7 @@ namespace SolidDNA
                         commandIconPathFormat,
                     tooltip: "Image quality",
                     hint:
-                        "Set shaded image quality to Low 10%, Medium 50%, or High 100%.",
+                        "Set shaded and wireframe quality to Low 10%, Medium 50%, or High 100%.",
                     tabView:
                         CommandManagerItemTabView
                             .IconWithTextBelow,
@@ -481,7 +481,7 @@ namespace SolidDNA
                 {
                     Name = "Low 10%",
                     Tooltip = "Low image quality (10%).",
-                    Hint = "Set shaded image quality to 10%.",
+                    Hint = "Set shaded and wireframe image quality to 10%.",
                     ImageIndex = 5,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
@@ -494,7 +494,7 @@ namespace SolidDNA
                 {
                     Name = "Medium 50%",
                     Tooltip = "Medium image quality (50%).",
-                    Hint = "Set shaded image quality to 50%.",
+                    Hint = "Set shaded and wireframe image quality to 50%.",
                     ImageIndex = 5,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
@@ -507,7 +507,7 @@ namespace SolidDNA
                 {
                     Name = "High 100%",
                     Tooltip = "High image quality (100%).",
-                    Hint = "Set shaded image quality to 100%.",
+                    Hint = "Set shaded and wireframe image quality to 100%.",
                     ImageIndex = 5,
                     VisibleForDrawings = true,
                     VisibleForAssemblies = true,
