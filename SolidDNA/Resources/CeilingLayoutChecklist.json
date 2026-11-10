@@ -1,0 +1,193 @@
+{
+  "title": "Ceiling Layout Drawing Checklist",
+  "version": "0.1",
+  "status": "Draft for iteration",
+  "scope": "Ceiling layout drawings; use Not applicable for conditions absent from a particular drawing.",
+  "source": "Merged_Ceiling_Layout_Comments.pdf, 22 pages",
+  "response_options": [
+    "Not reviewed",
+    "Pass",
+    "Needs work",
+    "Not applicable"
+  ],
+  "items": [
+    {
+      "id": "CL-01",
+      "title": "Identity and handedness",
+      "guidance": "Confirm the cabin type and ALMACO code against the current Cabin Typing List. Show only handedness variants that actually exist; check the identification table on every sheet.",
+      "source_pages": [
+        1,
+        20
+      ],
+      "example_from_review": "The comments identify an incorrect right-handed row for a cabin type with no right-handed version.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-02",
+      "title": "Drawing identity",
+      "guidance": "Check the drawing number, name, revision, sheet count and related wall/ceiling drawing identifiers. Do not release a sheet with an unassigned drawing number or an ambiguous name.",
+      "source_pages": [
+        3,
+        4
+      ],
+      "example_from_review": "A layout was marked as missing its drawing number; another comment asks for accurate naming.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-03",
+      "title": "Configuration and properties",
+      "guidance": "Compare the drawing's configuration name, displayed dimensions, material or fire classification and referenced model/design-table properties. Resolve differences before release.",
+      "source_pages": [
+        13,
+        16,
+        21
+      ],
+      "example_from_review": "The comments flag a configuration/dimension mismatch and a B-15 property that should be checked in the design table.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-04",
+      "title": "Variant completeness",
+      "guidance": "Compare left- and right-handed sheets where both variants exist. Check mirrored cutout positions and required dimensions; omit a nonexistent variant.",
+      "source_pages": [
+        1,
+        11,
+        20,
+        21
+      ],
+      "example_from_review": "The comments identify cutouts in the wrong corner, missing dimensions in the opposite variant, and an invalid right-handed variant.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-05",
+      "title": "Panel and parts list",
+      "guidance": "Match panel IDs, configuration/type codes, quantities and descriptions between views, balloons and the parts list. Include a part-number column where the list needs one; keep one clear balloon per part.",
+      "source_pages": [
+        6,
+        11,
+        17
+      ],
+      "example_from_review": "The review requests a part-number column, checks S/SM/SF markings, and asks for one balloon per part.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-06",
+      "title": "Dimension references",
+      "guidance": "Dimension each panel, opening and profile from the intended manufacturing or installation datum. Prefer the ceiling panel edge when that is the controlling edge; make the reference unambiguous.",
+      "source_pages": [
+        8,
+        18,
+        22
+      ],
+      "example_from_review": "Comments correct dimensions taken from the inside of a profile or wall panel instead of the ceiling panel edge.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-07",
+      "title": "Dimensions and precision",
+      "guidance": "Check that critical overall, cutout and detail dimensions are present, legible and rounded only to appropriate precision. Add center marks and matching dimensions on corresponding variants.",
+      "source_pages": [
+        1,
+        3,
+        16,
+        19,
+        21,
+        22
+      ],
+      "example_from_review": "The review flags incorrect precision, missing center marks and an undimensioned cutout.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-08",
+      "title": "Profile and joint lengths",
+      "guidance": "Check actual cut lengths for ceiling/decorative profiles, inclined frame sections and joint-filling pieces against the model and callouts. Distinguish different lengths where the profiles do not match.",
+      "source_pages": [
+        4,
+        14,
+        15
+      ],
+      "example_from_review": "A comment distinguishes inclined profile lengths; another changes a 938 mm note to the 926 mm joint-filling length in that instance.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-09",
+      "title": "Equipment openings",
+      "guidance": "For each selected light, speaker, HVAC, sprinkler and detector, verify opening size, quantity and position against the selected component. Remove TBD values once equipment is fixed.",
+      "source_pages": [
+        10,
+        12,
+        13,
+        22
+      ],
+      "example_from_review": "A selected speaker's required 172 mm opening was noted; the review also calls for opening quantity, size and placement.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-10",
+      "title": "Cable penetrations",
+      "guidance": "Agree cable penetration sizes, quantities and positions with the electrical team and its current penetration drawing. If a cut is made on site, still specify its location and required size; remove temporary notes when final.",
+      "source_pages": [
+        10,
+        11,
+        12,
+        21
+      ],
+      "example_from_review": "The comments ask for electrical coordination, verified cable positions and removal of a provisional note after finalization.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-11",
+      "title": "Installation direction",
+      "guidance": "Show the installation start point and sequence clearly enough for the installer to follow, including direction changes around the cabin. Check that the note and arrow agree with the layout.",
+      "source_pages": [
+        10,
+        11,
+        17
+      ],
+      "example_from_review": "The start-point note was called unclear about the route toward the back of the cabin and door.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-12",
+      "title": "Materials and finish",
+      "guidance": "Specify finish/color and the type and quantity of insulation or wool needed for procurement. Check joint filling and fire-related material callouts against the selected specification.",
+      "source_pages": [
+        11,
+        16,
+        21
+      ],
+      "example_from_review": "The review asks for wool type and quantity and questions a fire-related B-15 property; drawing callouts contain finish and joint-filling notes.",
+      "note_enabled": true,
+      "media": []
+    },
+    {
+      "id": "CL-13",
+      "title": "Annotations and readability",
+      "guidance": "Scan each sheet at ordinary viewing scale: align leaders and arrowheads, separate crowded arrows, keep details large enough, avoid repeated notes, and use consistent circular balloons.",
+      "source_pages": [
+        6,
+        7,
+        9,
+        14,
+        15,
+        17,
+        18,
+        22
+      ],
+      "example_from_review": "The comments request clearer detail boundaries, consistent arrowheads, round balloons and less crowded or repeated annotations.",
+      "note_enabled": true,
+      "media": []
+    }
+  ]
+}

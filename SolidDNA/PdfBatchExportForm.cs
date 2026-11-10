@@ -21,6 +21,7 @@ namespace SolidDNA
         private readonly ISldWorks swApp;
         private readonly PdfExportNamingMode namingMode;
         private readonly BindingList<PdfBatchExportItem> drawingItems;
+        private PdfNamingPattern currentNamingPattern;
 
         private PdfBatchExportUserPreferences userPreferences;
         private bool suppressPreferenceEvents;
@@ -75,6 +76,7 @@ namespace SolidDNA
             this.swApp = swApp;
             this.namingMode = namingMode;
             drawingItems = new BindingList<PdfBatchExportItem>();
+            currentNamingPattern = PdfAutoNaming.Load();
             userPreferences = PdfBatchExportUserPreferences.Load();
 
             BuildUserInterface();
@@ -181,8 +183,37 @@ namespace SolidDNA
 
             panel.Controls.Add(addDrawingsButton);
             panel.Controls.Add(removeDrawingsButton);
+            if (namingMode == PdfExportNamingMode.AutomaticFromProperties)
+                panel.Controls.Add(CreateButton(
+                    "Change Auto Naming Setting", ChangeAutoNamingSetting_Click));
 
             return panel;
+        }
+
+        private void ChangeAutoNamingSetting_Click(object sender, EventArgs e)
+        {
+            // Reading properties is an explicit user action; adding drawings stays fast.
+            List<PdfBatchExportItem> uncheckedItems = new List<PdfBatchExportItem>();
+            foreach (PdfBatchExportItem item in drawingItems)
+                if (!item.PropertiesRead) uncheckedItems.Add(item);
+            if (uncheckedItems.Count > 0) RefreshPropertiesForItems(uncheckedItems);
+
+            using (PdfAutoNamingDialog dialog = new PdfAutoNamingDialog(
+                currentNamingPattern, new List<PdfBatchExportItem>(drawingItems)))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                currentNamingPattern = dialog.Result;
+                foreach (PdfBatchExportItem item in drawingItems)
+                {
+                    PdfExportCommand.ApplyAutoNamingPattern(item, currentNamingPattern);
+                    item.UpdateDisplayStatus(namingMode);
+                }
+                drawingsGrid.Refresh();
+                UpdateFormStatus();
+                if (!PdfAutoNaming.Save(currentNamingPattern))
+                    MessageBox.Show(this, "The naming setting is active here but could not be remembered.",
+                        "Cabin Tools", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private Control BuildOutputAndOptionsPanel()
@@ -623,6 +654,11 @@ namespace SolidDNA
                         swApp,
                         item,
                         namingMode);
+                    if (namingMode == PdfExportNamingMode.AutomaticFromProperties)
+                    {
+                        PdfExportCommand.ApplyAutoNamingPattern(item, currentNamingPattern);
+                        item.UpdateDisplayStatus(namingMode);
+                    }
                 }
             }
             finally

@@ -23,13 +23,8 @@ namespace SolidDNA
     public enum PropertyPaneControlType
     {
         Text,
-        MultilineText,
         List,
         Date,
-        Automatic,
-        ReadOnlyPreview,
-        // Kept for schema-v1 profile compatibility. New profiles use
-        // ReadOnlyPreview for read-only values.
         ReadOnly
     }
 
@@ -117,36 +112,12 @@ namespace SolidDNA
         public string AutomaticValue { get; set; }
         [XmlAttribute]
         public string DefaultExpression { get; set; }
-        [XmlAttribute]
-        public string DefaultValue { get; set; }
-        [XmlAttribute]
-        public bool BlankMeansNoChange { get; set; }
-        [XmlAttribute]
-        public bool AllowExplicitClear { get; set; }
-        [XmlAttribute]
-        public int MaxLength { get; set; }
-        [XmlAttribute]
-        public string ValidationPattern { get; set; }
-        [XmlAttribute]
-        public string ValidationMessage { get; set; }
-        [XmlAttribute]
-        public string VisibleWhenFieldId { get; set; }
-        [XmlAttribute]
-        public string VisibleWhenValue { get; set; }
-        [XmlAttribute]
-        public string EnabledWhenFieldId { get; set; }
-        [XmlAttribute]
-        public string EnabledWhenValue { get; set; }
-        [XmlAttribute]
-        public string HelpText { get; set; }
         [XmlArrayItem("Scope")]
         public List<PropertyPaneScope> AllowedScopes { get; set; }
 
         public PropertyPaneField()
         {
             Visible = true;
-            BlankMeansNoChange = true;
-            AllowExplicitClear = true;
             AllowedScopes = new List<PropertyPaneScope>();
         }
     }
@@ -197,7 +168,7 @@ namespace SolidDNA
 
     internal static class PropertyPaneDefaults
     {
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 1;
 
         public static PropertyPaneProfile Create()
         {
@@ -241,82 +212,54 @@ namespace SolidDNA
 
         private static void AddPartLayout(PropertyPaneProfile profile)
         {
-            PropertyPaneGroup classification = Group("classification", "Class and sub-family", 0);
-            classification.Fields.Add(Field("class", "Class", "Class", 0, PropertyPaneControlType.List, "Class"));
-            classification.Fields.Add(Field("sub-family", "Sub-Family", "Sub-Family", 1, PropertyPaneControlType.List, "Sub-Family"));
-
-            PropertyPaneGroup attributes = Group("attributes", "Other attributes", 1);
-            attributes.Fields.Add(Field("brand", "Brand", "Brand", 0, PropertyPaneControlType.List, "Brand", defaultScope: PropertyPaneScope.ActiveConfiguration));
-            attributes.Fields.Add(Field("model", "Model", "Model", 1, PropertyPaneControlType.List, "Model"));
-            attributes.Fields.Add(Field("specification1", "Specification", "Specification1", 2, defaultScope: PropertyPaneScope.ActiveConfiguration));
-            attributes.Fields.Add(Field("reference", "Reference", "Reference", 3, defaultScope: PropertyPaneScope.ActiveConfiguration));
-
-            PropertyPaneGroup general = Group("general", "General", 2);
-            general.Fields.Add(Field("material", "Material", "Material", 0, PropertyPaneControlType.Text, null, "$PRP:\"SW-Material\""));
-
-            PropertyPaneGroup drawing = Group("drawing-properties", "Drawing properties", 3);
-            drawing.Fields.Add(Field("project", "Project", "Project", 0));
-            drawing.Fields.Add(Field("description", "Description", "Description", 1, PropertyPaneControlType.MultilineText));
-            drawing.Fields.Add(Field("designby", "Designed By", "DesignBy", 2, PropertyPaneControlType.List, "DesignBy"));
-            drawing.Fields.Add(Field("designdate", "Designed Date", "DesignDate", 3, PropertyPaneControlType.Date));
-
-            profile.Layouts.Add(new PropertyPaneLayout
-            {
-                DocumentKind = PropertyPaneDocumentKind.Part,
-                Groups = new List<PropertyPaneGroup> { classification, attributes, general, drawing }
-            });
+            PropertyPaneGroup identity = Group("identity", "Properties", 0);
+            identity.Fields.Add(Field("class", "Class", "Class", 0, PropertyPaneControlType.List, "Class"));
+            identity.Fields.Add(Field("sub-family", "Sub-Family", "Sub-Family", 1, PropertyPaneControlType.List, "Sub-Family"));
+            identity.Fields.Add(Field("brand", "Brand", "Brand", 2, PropertyPaneControlType.List, "Brand"));
+            identity.Fields.Add(Field("model", "Model", "Model", 3, PropertyPaneControlType.List, "Model"));
+            identity.Fields.Add(Field("specification1", "Specification", "Specification1", 4));
+            identity.Fields.Add(Field("reference", "Reference", "Reference", 5));
+            identity.Fields.Add(Field("material", "Material", "Material", 6, PropertyPaneControlType.Text, null, "$PRP:\"SW-Material\""));
+            identity.Fields.Add(Field("project", "Project", "Project", 7));
+            identity.Fields.Add(Field("description", "Description", "Description", 8));
+            identity.Fields.Add(Field("designby", "Design by", "DesignBy", 9, PropertyPaneControlType.List, "DesignBy"));
+            identity.Fields.Add(Field("designdate", "Design date", "DesignDate", 10, PropertyPaneControlType.Date));
+            profile.Layouts.Add(new PropertyPaneLayout { DocumentKind = PropertyPaneDocumentKind.Part, Groups = new List<PropertyPaneGroup> { identity } });
         }
 
         private static void AddAssemblyLayout(PropertyPaneProfile profile)
         {
-            PropertyPaneGroup identity = Group("assembly-identity", "General", 0);
-            identity.Fields.Add(Field("sw-filename", "File name", "SW-FileName", 0, PropertyPaneControlType.ReadOnlyPreview, null, "$PRP:\"SW-File Name\"", "FileName"));
-            identity.Fields.Add(Field("description", "Description", "Description", 1, PropertyPaneControlType.MultilineText));
-
-            PropertyPaneGroup cabin = Group("assembly-cabin", "Cabin", 1);
-            cabin.Fields.Add(Field("cabin-description", "Cabin type", "Cabin type description", 0, PropertyPaneControlType.List, "Cabin type description"));
-            cabin.Fields.Add(Field("cabin-defined", "Cabin defined", "Cabin type defined", 1, PropertyPaneControlType.List, "Cabin type defined"));
-            cabin.Fields.Add(Field("layout-type", "Layout", "Layout type", 2, PropertyPaneControlType.List, "Layout Type"));
-            cabin.Fields.Add(Field("brand", "Brand", "Brand", 3, PropertyPaneControlType.List, "Brand", defaultScope: PropertyPaneScope.ActiveConfiguration));
-            cabin.Fields.Add(Field("model", "Model", "Model", 4, PropertyPaneControlType.List, "Model"));
-
-            PropertyPaneGroup approval = Group("assembly-approval", "Design and status", 2);
-            approval.Fields.Add(Field("designby", "Designed By", "DesignBy", 0, PropertyPaneControlType.List, "DesignBy"));
-            approval.Fields.Add(Field("designdate", "Designed Date", "DesignDate", 1, PropertyPaneControlType.Date));
-            approval.Fields.Add(Field("status", "Status", "Status", 2, PropertyPaneControlType.List, "Status"));
-            approval.Fields.Add(Field("weight", "Weight", "Weight", 3, PropertyPaneControlType.ReadOnlyPreview, null, "[SW-Mass] kg", "Weight"));
-            profile.Layouts.Add(new PropertyPaneLayout
-            {
-                DocumentKind = PropertyPaneDocumentKind.Assembly,
-                Groups = new List<PropertyPaneGroup> { identity, cabin, approval }
-            });
+            PropertyPaneGroup group = Group("assembly", "Properties", 0);
+            group.Fields.Add(Field("sw-filename", "File name", "SW-FileName", 0, PropertyPaneControlType.ReadOnly, null, "$PRP:\"SW-File Name\"", "FileName"));
+            group.Fields.Add(Field("description", "Description", "Description", 1));
+            group.Fields.Add(Field("cabin-description", "Cabin type", "Cabin type description", 2, PropertyPaneControlType.List, "Cabin type description"));
+            group.Fields.Add(Field("cabin-defined", "Cabin defined", "Cabin type defined", 3, PropertyPaneControlType.List, "Cabin type defined"));
+            group.Fields.Add(Field("layout-type", "Layout", "Layout type", 4, PropertyPaneControlType.List, "Layout Type"));
+            group.Fields.Add(Field("brand", "Brand", "Brand", 5, PropertyPaneControlType.List, "Brand"));
+            group.Fields.Add(Field("model", "Model", "Model", 6, PropertyPaneControlType.List, "Model"));
+            group.Fields.Add(Field("designby", "Design by", "DesignBy", 7, PropertyPaneControlType.List, "DesignBy"));
+            group.Fields.Add(Field("designdate", "Design date", "DesignDate", 8, PropertyPaneControlType.Date));
+            group.Fields.Add(Field("status", "Status", "Status", 9, PropertyPaneControlType.List, "Status"));
+            group.Fields.Add(Field("weight", "Weight", "Weight", 10, PropertyPaneControlType.ReadOnly, null, "[SW-Mass] kg", "Weight"));
+            profile.Layouts.Add(new PropertyPaneLayout { DocumentKind = PropertyPaneDocumentKind.Assembly, Groups = new List<PropertyPaneGroup> { group } });
         }
 
         private static void AddDrawingLayout(PropertyPaneProfile profile)
         {
-            PropertyPaneGroup titles = Group("drawing-titles", "Titles", 0);
-            titles.Fields.Add(Field("title2", "Title 2", "Title2", 0, PropertyPaneControlType.Automatic, null, "$PRP:\"Cabin type description\"", "Title2"));
-            titles.Fields.Add(Field("title3", "Title 3", "Title 3", 1, PropertyPaneControlType.Automatic, null, "$PRP:\"Cabin type defined\" - $PRP:\"Layout Type\"", "Title3"));
-
-            PropertyPaneGroup drawing = Group("drawing-identification", "Drawing", 1);
-            drawing.Fields.Add(Field("sw-filename", "File name", "SW-File Name", 0, PropertyPaneControlType.ReadOnlyPreview, null, null, "FileName"));
-            drawing.Fields.Add(Field("cabin-description", "Cabin type", "Cabin type description", 1, PropertyPaneControlType.List, "Cabin type description"));
-            drawing.Fields.Add(Field("cabin-defined", "Cabin defined", "Cabin type defined", 2, PropertyPaneControlType.List, "Cabin type defined"));
-            drawing.Fields.Add(Field("layout-type", "Layout", "Layout Type", 3, PropertyPaneControlType.List, "Layout Type"));
-            drawing.Fields.Add(Field("drwnumber", "Drawing Number", "DrwNumber", 4, PropertyPaneControlType.Automatic, null, null, "DrawingNumber"));
-            drawing.Fields.Add(Field("revision", "Revision", "Revision", 5));
-
-            PropertyPaneGroup approval = Group("drawing-approval", "Design and check", 2);
-            approval.Fields.Add(Field("designby", "Designer", "DesignBy", 0, PropertyPaneControlType.List, "DesignBy"));
-            approval.Fields.Add(Field("checkedby", "Checked By", "CheckedBy", 1));
-            approval.Fields.Add(Field("checkeddate", "Checked Date", "CheckedDate", 2, PropertyPaneControlType.Date));
-
-            PropertyPaneLayout layout = new PropertyPaneLayout
-            {
-                DocumentKind = PropertyPaneDocumentKind.Drawing,
-                Groups = new List<PropertyPaneGroup> { titles, drawing, approval }
-            };
-            foreach (PropertyPaneField field in layout.Groups.SelectMany(g => g.Fields))
+            PropertyPaneGroup group = Group("drawing", "Properties", 0);
+            group.Fields.Add(Field("title2", "Title 2", "Title2", 0, PropertyPaneControlType.ReadOnly, null, "$PRP:\"Cabin type description\"", "Title2"));
+            group.Fields.Add(Field("title3", "Title 3", "Title 3", 1, PropertyPaneControlType.ReadOnly, null, "$PRP:\"Cabin type defined\" - $PRP:\"Layout type\"", "Title3"));
+            group.Fields.Add(Field("sw-filename", "File name", "SW-File Name", 2, PropertyPaneControlType.ReadOnly, null, "$PRP:\"SW-File Name\"", "FileName"));
+            group.Fields.Add(Field("cabin-description", "Cabin type", "Cabin type description", 3, PropertyPaneControlType.List, "Cabin type description"));
+            group.Fields.Add(Field("cabin-defined", "Cabin defined", "Cabin type defined", 4, PropertyPaneControlType.List, "Cabin type defined"));
+            group.Fields.Add(Field("layout-type", "Layout", "Layout Type", 5, PropertyPaneControlType.List, "Layout Type"));
+            group.Fields.Add(Field("drwnumber", "Drawing no.", "DrwNumber", 6, PropertyPaneControlType.ReadOnly, null, null, "DrawingNumber"));
+            group.Fields.Add(Field("revision", "Revision", "Revision", 7));
+            group.Fields.Add(Field("designby", "Design by", "DesignBy", 8, PropertyPaneControlType.List, "DesignBy"));
+            group.Fields.Add(Field("checkedby", "Checked by", "CheckedBy", 9));
+            group.Fields.Add(Field("checkeddate", "Checked date", "CheckedDate", 10, PropertyPaneControlType.Date));
+            PropertyPaneLayout layout = new PropertyPaneLayout { DocumentKind = PropertyPaneDocumentKind.Drawing, Groups = new List<PropertyPaneGroup> { group } };
+            foreach (PropertyPaneField field in group.Fields)
             {
                 field.AllowedScopes = new List<PropertyPaneScope> { PropertyPaneScope.Document };
                 field.DefaultScope = PropertyPaneScope.Document;
@@ -427,12 +370,9 @@ Cabin Captain (1)|Sleeping Room|Wall Layout|D.520.0084.408.563";
 
         private static PropertyPaneField Field(string id, string label, string propertyName, int order,
             PropertyPaneControlType controlType = PropertyPaneControlType.Text, string listName = null,
-            string defaultExpression = null, string automaticValue = null,
-            PropertyPaneScope defaultScope = PropertyPaneScope.Document)
+            string defaultExpression = null, string automaticValue = null)
         {
-            bool readOnly = controlType == PropertyPaneControlType.ReadOnly ||
-                            controlType == PropertyPaneControlType.ReadOnlyPreview ||
-                            controlType == PropertyPaneControlType.Automatic;
+            bool readOnly = controlType == PropertyPaneControlType.ReadOnly;
             return new PropertyPaneField
             {
                 Id = id,
@@ -444,9 +384,7 @@ Cabin Captain (1)|Sleeping Room|Wall Layout|D.520.0084.408.563";
                 ReadOnly = readOnly,
                 AutomaticValue = automaticValue,
                 DefaultExpression = defaultExpression,
-                DefaultScope = defaultScope,
-                BlankMeansNoChange = true,
-                AllowExplicitClear = !readOnly,
+                DefaultScope = PropertyPaneScope.Document,
                 AllowedScopes = readOnly
                     ? new List<PropertyPaneScope> { PropertyPaneScope.Document }
                     : new List<PropertyPaneScope> { PropertyPaneScope.Document, PropertyPaneScope.ActiveConfiguration, PropertyPaneScope.SelectedConfigurations, PropertyPaneScope.AllConfigurations }

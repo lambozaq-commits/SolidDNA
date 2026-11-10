@@ -147,15 +147,16 @@ namespace SolidDNA
             IModelDoc2 model = CabinCustomPropertyStore.GetActiveModelDocument();
             if (model == null)
             {
-                ShowWarning("Open a part or assembly first.");
+                ShowWarning("Open a part, assembly, or drawing first.");
                 return;
             }
 
             int documentType = model.GetType();
             if (documentType != (int)swDocumentTypes_e.swDocPART &&
-                documentType != (int)swDocumentTypes_e.swDocASSEMBLY)
+                documentType != (int)swDocumentTypes_e.swDocASSEMBLY &&
+                documentType != (int)swDocumentTypes_e.swDocDRAWING)
             {
-                ShowWarning("Image Quality is available for parts and assemblies.");
+                ShowWarning("Image Quality is available for parts, assemblies, and drawings.");
                 return;
             }
 

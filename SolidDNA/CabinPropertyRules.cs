@@ -205,7 +205,7 @@ namespace SolidDNA
             return MakeSafeFileName(fileName);
         }
 
-        private static string BuildCabinNameForPdf(
+        internal static string BuildCabinNameForPdf(
             string cabinTypeDescription,
             string cabinTypeDefined)
         {
@@ -254,7 +254,7 @@ namespace SolidDNA
             return true;
         }
 
-        private static string CleanLayoutTypeForPdf(string layoutType)
+        internal static string CleanLayoutTypeForPdf(string layoutType)
         {
             string value = Clean(layoutType);
 

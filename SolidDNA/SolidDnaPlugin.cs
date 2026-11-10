@@ -409,8 +409,12 @@ namespace SolidDNA
             items.Add(CreateSaveCommand());
             items.AddRange(CreatePropertyCommands());
             items.AddRange(CreateExportCommands());
-            items.AddRange(CreateDrawingCommands());
+            // Keep existing Shortcut Bar command positions stable. The new
+            // checklist goes after commands already registered in this flyout.
+            List<CommandManagerItem> drawingCommands = CreateDrawingCommands();
+            items.Add(drawingCommands[0]);
             items.AddRange(CreateAssemblyCommands());
+            items.Add(drawingCommands[1]);
 
             return items;
         }
@@ -444,9 +448,8 @@ namespace SolidDNA
             items.Add(
                 new CommandManagerSeparator());
 
-            AddItems(
-                items,
-                CreateDrawingCommands());
+            List<CommandManagerItem> drawingCommands = CreateDrawingCommands();
+            AddItems(items, drawingCommands.GetRange(0, 1));
 
             items.Add(
                 new CommandManagerSeparator());
@@ -454,6 +457,8 @@ namespace SolidDNA
             AddItems(
                 items,
                 CreateAssemblyCommands());
+
+            AddItems(items, drawingCommands.GetRange(1, 1));
 
             return items;
         }
@@ -488,7 +493,7 @@ namespace SolidDNA
                     VisibleForParts = true,
                     OnClick = DocumentQualitySaveCommand.SetLowImageQuality,
                     OnStateCheck = args =>
-                        args.Result = CabinToolsCommandState.ForPartOrAssembly()
+                        args.Result = CabinToolsCommandState.ForSupportedDocument()
                 },
                 new CommandManagerItem
                 {
@@ -501,7 +506,7 @@ namespace SolidDNA
                     VisibleForParts = true,
                     OnClick = DocumentQualitySaveCommand.SetMediumImageQuality,
                     OnStateCheck = args =>
-                        args.Result = CabinToolsCommandState.ForPartOrAssembly()
+                        args.Result = CabinToolsCommandState.ForSupportedDocument()
                 },
                 new CommandManagerItem
                 {
@@ -514,7 +519,7 @@ namespace SolidDNA
                     VisibleForParts = true,
                     OnClick = DocumentQualitySaveCommand.SetHighImageQuality,
                     OnStateCheck = args =>
-                        args.Result = CabinToolsCommandState.ForPartOrAssembly()
+                        args.Result = CabinToolsCommandState.ForSupportedDocument()
                 }
             };
         }
@@ -732,6 +737,19 @@ namespace SolidDNA
                         args.Result =
                             CabinToolsCommandState
                                 .ForDrawing()
+                },
+                new CommandManagerItem
+                {
+                    Name = "Drawing Checklist",
+                    Tooltip = "Review a ceiling layout drawing.",
+                    Hint = "Record checklist results and notes for the active drawing outside the drawing file.",
+                    ImageIndex = 4,
+                    VisibleForDrawings = true,
+                    VisibleForAssemblies = true,
+                    VisibleForParts = true,
+                    OnClick = DrawingChecklistCommand.Show,
+                    OnStateCheck = args =>
+                        args.Result = CabinToolsCommandState.ForDrawing()
                 }
             };
         }

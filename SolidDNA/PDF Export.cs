@@ -73,6 +73,8 @@ namespace SolidDNA
         public string AutoFileName { get; set; }
         public string ManualFileName { get; set; }
         public CabinNamingValues NamingValues { get; set; }
+        public Dictionary<string, string> NamingMetadata { get; set; }
+        public string AutoNamingError { get; set; }
         public List<string> MissingNamingProperties { get; set; }
         public string PreflightError { get; set; }
         public bool PropertiesRead { get; set; }
@@ -87,6 +89,7 @@ namespace SolidDNA
             AutoFileName = string.Empty;
             ManualFileName = string.Empty;
             PreflightError = string.Empty;
+            AutoNamingError = string.Empty;
             PropertiesRead = false;
             Status = string.Empty;
         }
@@ -115,7 +118,7 @@ namespace SolidDNA
                 if (namingMode == PdfExportNamingMode.AutomaticFromProperties)
                 {
                     Status =
-                        "Pending property check - click Refresh properties or export to read naming values.";
+                        "Properties not checked.";
                 }
                 else
                 {
@@ -468,7 +471,9 @@ namespace SolidDNA
 
             item.PreflightError = string.Empty;
             item.NamingValues = null;
+            item.NamingMetadata = null;
             item.AutoFileName = string.Empty;
+            item.AutoNamingError = string.Empty;
             item.MissingNamingProperties = new List<string>();
             item.PropertiesRead = false;
 
@@ -511,14 +516,15 @@ namespace SolidDNA
                     CabinPropertyService.ReadNamingValues(drawing);
 
                 item.NamingValues = values;
-                item.MissingNamingProperties =
-                    CabinPropertyRules.GetMissingPdfNamingProperties(
-                        values);
-
-                if (!item.HasMissingNamingProperties)
+                if (namingMode == PdfExportNamingMode.AutomaticFromProperties)
                 {
-                    item.AutoFileName =
-                        CabinPropertyRules.BuildPdfFileName(values);
+                    item.NamingMetadata = PdfAutoNaming.ReadMetadata(drawing, values);
+                    ApplyAutoNamingPattern(item, PdfAutoNaming.Load());
+                }
+                else
+                {
+                    item.MissingNamingProperties =
+                        CabinPropertyRules.GetMissingPdfNamingProperties(values);
                 }
 
                 if (string.IsNullOrWhiteSpace(item.ManualFileName))
@@ -543,6 +549,17 @@ namespace SolidDNA
 
             item.PropertiesRead = true;
             item.UpdateDisplayStatus(namingMode);
+        }
+
+        internal static void ApplyAutoNamingPattern(PdfBatchExportItem item, PdfNamingPattern pattern)
+        {
+            if (item == null || item.NamingMetadata == null) return;
+            List<string> missing;
+            string error;
+            string name = PdfAutoNaming.Build(pattern, item.NamingMetadata, out missing, out error);
+            item.MissingNamingProperties = missing;
+            item.AutoNamingError = error;
+            item.AutoFileName = missing.Count == 0 && string.IsNullOrWhiteSpace(error) ? name : "";
         }
 
         internal static string GetExportBlockReason(
@@ -577,7 +594,7 @@ namespace SolidDNA
             {
                 if (!item.PropertiesRead)
                 {
-                    return "Properties have not been read. Click Refresh properties.";
+                    return "Properties have not been read. Click Check Properties.";
                 }
 
                 if (item.HasMissingNamingProperties)
@@ -586,6 +603,9 @@ namespace SolidDNA
                            string.Join(", ",
                                item.MissingNamingProperties);
                 }
+
+                if (!string.IsNullOrWhiteSpace(item.AutoNamingError))
+                    return item.AutoNamingError;
 
                 if (string.IsNullOrWhiteSpace(item.AutoFileName))
                 {

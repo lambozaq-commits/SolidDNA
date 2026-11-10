@@ -32,7 +32,6 @@ namespace SolidDNA
         public bool WasResolved { get; set; }
         public bool IsLinked { get; set; }
         public int Type { get; set; }
-        public bool Exists { get; set; }
     }
 
     /// <summary>
@@ -169,7 +168,7 @@ namespace SolidDNA
             bool wasResolved;
             bool linked;
 
-            int getResult = propertyManager.Get6(
+            propertyManager.Get6(
                 propertyName,
                 false,
                 out rawValue,
@@ -188,8 +187,7 @@ namespace SolidDNA
                 ResolvedValue = resolvedValue ?? string.Empty,
                 WasResolved = wasResolved,
                 IsLinked = linked,
-                Type = propertyType,
-                Exists = getResult != (int)swCustomInfoGetResult_e.swCustomInfoGetResult_NotPresent
+                Type = propertyType
             };
         }
 
@@ -250,12 +248,6 @@ namespace SolidDNA
 
             try
             {
-                if (modelDoc.IsOpenedViewOnly())
-                {
-                    return
-                        "The active document is still loading or is open in view-only mode. " +
-                        "Open it fully before editing properties.";
-                }
                 if (modelDoc.IsOpenedReadOnly())
                 {
                     return

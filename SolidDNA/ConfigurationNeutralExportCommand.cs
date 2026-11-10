@@ -235,6 +235,7 @@ namespace SolidDNA
         private sealed class NamingPart
         {
             public string FieldKey { get; set; }
+            public string TextBefore { get; set; }
             public string SeparatorAfter { get; set; }
         }
 
@@ -639,11 +640,11 @@ namespace SolidDNA
                         error = "Missing " + GetFieldLabel(part.FieldKey ?? string.Empty);
                         return string.Empty;
                     }
+                    result.Append(part.TextBefore ?? string.Empty);
                     result.Append(SanitizeFileNamePart(value));
-                    if (i < template.Parts.Count - 1)
-                        result.Append(part.SeparatorAfter ?? string.Empty);
+                    result.Append(part.SeparatorAfter ?? string.Empty);
                 }
-                string name = result.ToString().Trim();
+                string name = result.ToString();
                 error = GetFileNameError(name);
                 return name;
             }
@@ -655,6 +656,7 @@ namespace SolidDNA
                     copy.Parts.Add(new NamingPart
                     {
                         FieldKey = part.FieldKey,
+                        TextBefore = part.TextBefore,
                         SeparatorAfter = part.SeparatorAfter
                     });
                 return copy;
@@ -690,7 +692,9 @@ namespace SolidDNA
                     if (!string.Equals(left.NamingTemplate.Parts[i].FieldKey,
                             right.NamingTemplate.Parts[i].FieldKey, StringComparison.Ordinal) ||
                         !string.Equals(left.NamingTemplate.Parts[i].SeparatorAfter,
-                            right.NamingTemplate.Parts[i].SeparatorAfter, StringComparison.Ordinal))
+                            right.NamingTemplate.Parts[i].SeparatorAfter, StringComparison.Ordinal) ||
+                        !string.Equals(left.NamingTemplate.Parts[i].TextBefore,
+                            right.NamingTemplate.Parts[i].TextBefore, StringComparison.Ordinal))
                         return false;
                 for (int i = 0; i < left.Rows.Count; i++)
                     if (!string.Equals(left.Rows[i].FileName, right.Rows[i].FileName, StringComparison.Ordinal) ||
@@ -748,7 +752,8 @@ namespace SolidDNA
                 if (left.Parts.Count != right.Parts.Count) return false;
                 for (int i = 0; i < left.Parts.Count; i++)
                     if (!string.Equals(left.Parts[i].FieldKey, right.Parts[i].FieldKey, StringComparison.Ordinal) ||
-                        !string.Equals(left.Parts[i].SeparatorAfter, right.Parts[i].SeparatorAfter, StringComparison.Ordinal))
+                        !string.Equals(left.Parts[i].SeparatorAfter, right.Parts[i].SeparatorAfter, StringComparison.Ordinal) ||
+                        !string.Equals(left.Parts[i].TextBefore, right.Parts[i].TextBefore, StringComparison.Ordinal))
                         return false;
                 return true;
             }
@@ -1503,7 +1508,7 @@ namespace SolidDNA
 
                 Label guidance = new Label
                 {
-                    Text = "Choose fields in order and type any separator after each. The last separator is ignored.",
+                    Text = "Choose fields in order. Text before is a prefix; text after is a separator or suffix, including on the last field.",
                     Dock = DockStyle.Top,
                     Height = 48,
                     Padding = new Padding(12, 12, 12, 0)
@@ -1521,14 +1526,19 @@ namespace SolidDNA
                 fields.BackgroundColor = Color.White;
                 DataGridViewComboBoxColumn property = new DataGridViewComboBoxColumn
                 {
-                    Name = "Property", HeaderText = "Property", FillWeight = 75,
+                    Name = "Property", HeaderText = "Property", FillWeight = 58,
                     DataSource = choices.ToList(), DisplayMember = "Label", ValueMember = "Key",
                     FlatStyle = FlatStyle.Flat, SortMode = DataGridViewColumnSortMode.NotSortable
                 };
                 fields.Columns.Add(property);
                 fields.Columns.Add(new DataGridViewTextBoxColumn
                 {
-                    Name = "Separator", HeaderText = "Separator after", FillWeight = 25,
+                    Name = "Before", HeaderText = "Text before (prefix)", FillWeight = 21,
+                    MinimumWidth = 120, SortMode = DataGridViewColumnSortMode.NotSortable
+                });
+                fields.Columns.Add(new DataGridViewTextBoxColumn
+                {
+                    Name = "Separator", HeaderText = "Text after (separator/suffix)", FillWeight = 21,
                     MinimumWidth = 125, SortMode = DataGridViewColumnSortMode.NotSortable
                 });
                 fields.CurrentCellDirtyStateChanged += delegate
@@ -1552,7 +1562,7 @@ namespace SolidDNA
                 Button add = new Button { Text = "Add field", AutoSize = true };
                 add.Click += delegate
                 {
-                    int index = fields.Rows.Add("configuration.name", string.Empty);
+                    int index = fields.Rows.Add("configuration.name", string.Empty, string.Empty);
                     fields.CurrentCell = fields.Rows[index].Cells["Separator"];
                     fields.Focus();
                     UpdatePreview();
@@ -1622,7 +1632,7 @@ namespace SolidDNA
                 CancelButton = cancel;
 
                 foreach (NamingPart part in current.Parts)
-                    fields.Rows.Add(part.FieldKey, part.SeparatorAfter);
+                    fields.Rows.Add(part.FieldKey, part.TextBefore, part.SeparatorAfter);
                 if (previewConfiguration.Items.Count > 0) previewConfiguration.SelectedIndex = 0;
                 if (fields.Rows.Count > 0)
                     fields.CurrentCell = fields.Rows[0].Cells["Separator"];
@@ -1637,6 +1647,7 @@ namespace SolidDNA
                     template.Parts.Add(new NamingPart
                     {
                         FieldKey = Convert.ToString(row.Cells["Property"].Value),
+                        TextBefore = Convert.ToString(row.Cells["Before"].Value) ?? string.Empty,
                         SeparatorAfter = Convert.ToString(row.Cells["Separator"].Value) ?? string.Empty
                     });
                 return template;
@@ -1650,10 +1661,13 @@ namespace SolidDNA
                 if (to < 0 || to >= fields.Rows.Count) return;
                 fields.EndEdit();
                 object key = fields.Rows[from].Cells["Property"].Value;
+                object before = fields.Rows[from].Cells["Before"].Value;
                 object separator = fields.Rows[from].Cells["Separator"].Value;
                 fields.Rows[from].Cells["Property"].Value = fields.Rows[to].Cells["Property"].Value;
+                fields.Rows[from].Cells["Before"].Value = fields.Rows[to].Cells["Before"].Value;
                 fields.Rows[from].Cells["Separator"].Value = fields.Rows[to].Cells["Separator"].Value;
                 fields.Rows[to].Cells["Property"].Value = key;
+                fields.Rows[to].Cells["Before"].Value = before;
                 fields.Rows[to].Cells["Separator"].Value = separator;
                 fields.CurrentCell = fields.Rows[to].Cells["Property"];
                 UpdatePreview();
@@ -2028,11 +2042,13 @@ namespace SolidDNA
                     foreach (string line in lines.Skip(1))
                     {
                         string[] parts = line.Split('\t');
-                        if (parts.Length != 2) return NamingTemplate.Default();
+                        if (parts.Length != 2 && parts.Length != 3) return NamingTemplate.Default();
                         string key = Encoding.UTF8.GetString(Convert.FromBase64String(parts[0]));
-                        string separator = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1]));
+                        string before = parts.Length == 3
+                            ? Encoding.UTF8.GetString(Convert.FromBase64String(parts[1])) : string.Empty;
+                        string separator = Encoding.UTF8.GetString(Convert.FromBase64String(parts[parts.Length - 1]));
                         if (string.IsNullOrWhiteSpace(key)) return NamingTemplate.Default();
-                        template.Parts.Add(new NamingPart { FieldKey = key, SeparatorAfter = separator });
+                        template.Parts.Add(new NamingPart { FieldKey = key, TextBefore = before, SeparatorAfter = separator });
                     }
                     return template.Parts.Count > 0 ? template : NamingTemplate.Default();
                 }
@@ -2048,6 +2064,7 @@ namespace SolidDNA
                     List<string> lines = new List<string> { "CabinToolsNamingV1" };
                     foreach (NamingPart part in template.Parts)
                         lines.Add(Convert.ToBase64String(Encoding.UTF8.GetBytes(part.FieldKey ?? string.Empty)) + "\t" +
+                            Convert.ToBase64String(Encoding.UTF8.GetBytes(part.TextBefore ?? string.Empty)) + "\t" +
                             Convert.ToBase64String(Encoding.UTF8.GetBytes(part.SeparatorAfter ?? string.Empty)));
                     File.WriteAllLines(NamingSettingsPath, lines.ToArray(), Encoding.UTF8);
                     return true;
